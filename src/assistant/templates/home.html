@@ -1,0 +1,35 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>个人助手日报</h1>
+{% if report %}
+  <h2>{{ report.title }}</h2>
+  <p>地区：{{ report.location }} · 生成时间：{{ report.generated_at }}</p>
+  {% if report.degraded %}<p><strong>部分内容降级或缺失。</strong></p>{% endif %}
+  {% for block in report.blocks %}
+  <section id="{{ block.kind }}">
+    <h3>{{ block.title }}{% if block.status != "ok" %}（{{ block.status }}）{% endif %}</h3>
+    {% if block.message %}<p>{{ block.message }}</p>{% endif %}
+    {% if block.kind == "weather" %}
+      {% if block.details.current %}
+        <p>当前 {{ block.details.current.description }}，温度 {{ block.details.current.temperature }}°C，
+          湿度 {{ block.details.current.humidity }}%，风速 {{ block.details.current.wind_speed }} km/h，
+          AQI {{ block.details.current.air_quality_aqi }}。</p>
+      {% endif %}
+      <ul>
+        {% for day in block.details.days %}
+        <li>{{ day.date }}：{{ day.description }}，{{ day.temp_min }}°C ~ {{ day.temp_max }}°C</li>
+        {% endfor %}
+      </ul>
+    {% else %}
+      <ul>
+        {% for item in block['items'] %}
+        <li><a href="{{ item.url }}">{{ item.title }}</a> — {{ item.source }}</li>
+        {% endfor %}
+      </ul>
+    {% endif %}
+  </section>
+  {% endfor %}
+{% else %}
+  <p>暂无日报快照。</p>
+{% endif %}
+{% endblock %}
