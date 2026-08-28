@@ -21,6 +21,9 @@ pushplus_token = ""
 # 企业微信群机器人备用渠道；Webhook URL 含密钥，建议只放在 .env。
 wecom_group_webhook = ""
 
+# 本地验证可设为 true，使用 mock 适配器，不调用真实推送 API。
+push_mock = false
+
 # 以下为企业微信自建应用遗留配置，仅供旧 WeComPushAdapter 使用；新方案不需要。
 wecom_corpid = ""
 wecom_agentid = ""

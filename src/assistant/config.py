@@ -16,7 +16,7 @@ DEFAULT_CONFIG_FILE = "config.toml"
 DEFAULT_LOCATION = "上海"
 DEFAULT_TIMEZONE = "Asia/Shanghai"
 DEFAULT_DATA_SOURCE_WHITELIST = ["weather", "news", "github", "ai"]
-DEFAULT_PUSH_CHANNELS = ["wechat_work"]
+DEFAULT_PUSH_CHANNELS = ["pushplus", "wecom_group"]
 DEFAULT_SOURCE_WHITELIST = [
     "xinhua",
     "people",
@@ -60,8 +60,18 @@ class Settings(BaseSettings):
     push_channels: list[str] = Field(
         default_factory=lambda: list(DEFAULT_PUSH_CHANNELS)
     )
+    pushplus_token: str = ""
+    wecom_group_webhook: str = ""
+    push_max_items: int = Field(default=5, ge=1, le=50)
+    push_mock: bool = False
     auth_token: str = ""
     web_require_auth: bool = False
+    wecom_corpid: str = ""
+    wecom_agentid: str = ""
+    wecom_secret: str = ""
+    wecom_userid: str = ""
+    web_url: str = "http://127.0.0.1:8000/"
+    wecom_mock: bool = False
 
     @field_validator("location")
     @classmethod

@@ -26,10 +26,27 @@ uv run python tests/manual_generate_report.py
 uv run python -m assistant
 ```
 
+生成并推送当天日报：
+
+```powershell
+uv run python -m assistant daily
+```
+
 访问 `http://127.0.0.1:8000/` 查看日报快照。
+
+## 验证推送
+
+先在 `.env` 中配置至少一个推送凭证，然后运行：
+
+```powershell
+uv run python tests/verify_push.py
+```
+
+脚本会依次验证 PushPlus 与企业微信群机器人。PushPlus 接口只返回“请求已接受”，因此还需要在微信中人工确认是否收到验证消息；群机器人验证后请在对应企业微信群中确认。
+
 
 ## 后续计划
 
 - 实现 PushPlus 与企业微信群机器人推送适配器，并接入现有 `PushAdapter` 边界。
-- 增加 GitHub Actions 定时任务，每天 08:30（Asia/Shanghai）生成并推送日报。
+- 已提供 `.github/workflows/daily-report.yml`，每天 08:30（Asia/Shanghai）生成并推送日报。
 - 后续若租赁服务器，将同一入口迁移为服务器定时任务，不改动业务代码。
