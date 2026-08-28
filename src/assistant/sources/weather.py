@@ -145,6 +145,11 @@ class OpenMeteoWeatherSource:
             "description": _description(current.get("weather_code")),
             "is_day": bool(current.get("is_day")),
             "precipitation": current.get("precipitation"),
+            "precipitation_probability": (
+                daily["precipitation_probability_max"][0]
+                if len(daily.get("precipitation_probability_max", [])) > 0
+                else None
+            ),
             "wind_speed": current.get("wind_speed_10m"),
             "wind_direction": current.get("wind_direction_10m"),
         }

@@ -16,6 +16,7 @@ class ContentItem:
     summary: str = ""
     language: str = ""
     category: str = ""
+    stars: int | None = None
     metadata: dict[str, Any] = field(default_factory=dict)
 
     @property
@@ -69,6 +70,7 @@ def content_item_to_dict(item: ContentItem) -> dict[str, Any]:
         "summary": item.summary,
         "language": item.language,
         "category": item.category,
+        "stars": item.stars,
         "metadata": item.metadata,
     }
 
@@ -108,6 +110,7 @@ def content_item_from_dict(data: dict[str, Any]) -> ContentItem:
         summary=data.get("summary", ""),
         language=data.get("language", ""),
         category=data.get("category", ""),
+        stars=data.get("stars"),
         metadata=data.get("metadata", {}),
     )
 

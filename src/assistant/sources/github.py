@@ -101,11 +101,15 @@ class GitHubTrendingSource:
             if len(parts) < 2:
                 continue
             owner, repo = parts[0], parts[1]
-            plain = html.unescape(re.sub(r"<[^>]+>", " ", path)).strip()
 
             description_match = _DESCRIPTION_RE.search(article)
             language_match = _LANGUAGE_RE.search(article)
             stars_match = _STARS_RE.search(article)
+            stars = (
+                int(stars_match.group(1).replace(",", ""))
+                if stars_match
+                else 0
+            )
 
             items.append(
                 ContentItem(
@@ -123,10 +127,9 @@ class GitHubTrendingSource:
                         else ""
                     ),
                     category="github_trending",
+                    stars=stars,
                     metadata={
-                        "stars": int(stars_match.group(1).replace(",", ""))
-                        if stars_match
-                        else 0,
+                        "stars": stars,
                         "mode": "official",
                     },
                 )
@@ -166,6 +169,7 @@ class GitHubTrendingSource:
                 summary=item.get("description", "") or "",
                 language=item.get("language", "") or "",
                 category="github_trending",
+                stars=item.get("stargazers_count", 0),
                 metadata={
                     "stars": item.get("stargazers_count", 0),
                     "mode": "search_api",

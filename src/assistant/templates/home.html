@@ -23,7 +23,7 @@
     {% else %}
       <ul>
         {% for item in block['items'] %}
-        <li><a href="{{ item.url }}">{{ item.title }}</a> — {{ item.source }}</li>
+        <li><a href="{{ item.url }}">{{ item.title }}</a> — {{ item.source }}{% if item.stars %} · ⭐ {{ item.stars }}{% endif %}</li>
         {% endfor %}
       </ul>
     {% endif %}

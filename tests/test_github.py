@@ -40,6 +40,7 @@ def test_github_source_parses_official_trending_page() -> None:
     assert result.items[0].url == "https://github.com/openai/evals"
     assert result.items[0].language == "Python"
     assert result.items[0].metadata["stars"] == 12345
+    assert result.items[0].stars == 12345
 
 
 def test_github_source_falls_back_to_search_api() -> None:

@@ -65,6 +65,7 @@ def test_weather_source_returns_today_and_next_two_days() -> None:
     assert block.status == "ok"
     assert block.details["current"]["temperature"] == 25.0
     assert block.details["current"]["air_quality_aqi"] == 67
+    assert block.details["current"]["precipitation_probability"] == 10
     assert block.details["days"][0]["description"] == "晴"
     assert len(block.details["days"]) == 3
 
