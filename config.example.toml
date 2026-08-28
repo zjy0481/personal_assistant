@@ -1,0 +1,16 @@
+# V1 单用户配置模板。
+# 复制为 config.toml 后按需修改；真实密钥不要提交到 Git。
+location = "上海"
+timezone = "Asia/Shanghai"
+
+# 启用的数据源；后续数据源模块按此名单启用。
+data_source_whitelist = ["weather", "news", "github", "ai"]
+
+# V1 推送渠道；当前为工作区方式（企业微信自建应用）。
+push_channels = ["wechat_work"]
+
+# 公网网页鉴权 token；本机测试留空。
+auth_token = ""
+
+# 公网部署时设为 true；此时 auth_token 不能为空。
+web_require_auth = false
