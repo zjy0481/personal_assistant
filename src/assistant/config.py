@@ -17,6 +17,16 @@ DEFAULT_LOCATION = "上海"
 DEFAULT_TIMEZONE = "Asia/Shanghai"
 DEFAULT_DATA_SOURCE_WHITELIST = ["weather", "news", "github", "ai"]
 DEFAULT_PUSH_CHANNELS = ["wechat_work"]
+DEFAULT_SOURCE_WHITELIST = [
+    "xinhua",
+    "people",
+    "thepaper",
+    "chinanews",
+    "cctv",
+    "reuters",
+    "ap",
+    "bbc",
+]
 
 
 class ConfigurationError(RuntimeError):
@@ -44,6 +54,9 @@ class Settings(BaseSettings):
     data_source_whitelist: list[str] = Field(
         default_factory=lambda: list(DEFAULT_DATA_SOURCE_WHITELIST)
     )
+    source_whitelist: list[str] = Field(
+        default_factory=lambda: list(DEFAULT_SOURCE_WHITELIST)
+    )
     push_channels: list[str] = Field(
         default_factory=lambda: list(DEFAULT_PUSH_CHANNELS)
     )
@@ -70,6 +83,7 @@ class Settings(BaseSettings):
 
     @field_validator(
         "data_source_whitelist",
+        "source_whitelist",
         "push_channels",
         mode="before",
     )

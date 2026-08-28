@@ -6,6 +6,9 @@ timezone = "Asia/Shanghai"
 # 启用的数据源；后续数据源模块按此名单启用。
 data_source_whitelist = ["weather", "news", "github", "ai"]
 
+# 新闻与 AI 允许采集的信源 key。
+source_whitelist = ["xinhua", "people", "thepaper", "chinanews", "cctv", "reuters", "ap", "bbc"]
+
 # V1 推送渠道；当前为工作区方式（企业微信自建应用）。
 push_channels = ["wechat_work"]
 

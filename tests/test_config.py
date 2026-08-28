@@ -6,6 +6,7 @@ from assistant.config import (
     DEFAULT_DATA_SOURCE_WHITELIST,
     DEFAULT_LOCATION,
     DEFAULT_PUSH_CHANNELS,
+    DEFAULT_SOURCE_WHITELIST,
     DEFAULT_TIMEZONE,
     ConfigurationError,
     Settings,
@@ -19,6 +20,7 @@ def test_load_settings_uses_default_configuration() -> None:
     assert settings.location == DEFAULT_LOCATION
     assert settings.timezone == DEFAULT_TIMEZONE
     assert settings.data_source_whitelist == DEFAULT_DATA_SOURCE_WHITELIST
+    assert settings.source_whitelist == DEFAULT_SOURCE_WHITELIST
     assert settings.push_channels == DEFAULT_PUSH_CHANNELS
     assert settings.auth_token == ""
     assert settings.web_require_auth is False
@@ -30,6 +32,7 @@ def test_load_settings_applies_explicit_environment_values() -> None:
             "ASSISTANT_LOCATION": "北京",
             "ASSISTANT_TIMEZONE": "Asia/Shanghai",
             "ASSISTANT_DATA_SOURCE_WHITELIST": "weather,news",
+            "ASSISTANT_SOURCE_WHITELIST": "people,bbc",
             "ASSISTANT_PUSH_CHANNELS": '["wechat_work"]',
             "ASSISTANT_AUTH_TOKEN": "secret",
             "ASSISTANT_WEB_REQUIRE_AUTH": "true",
@@ -39,6 +42,7 @@ def test_load_settings_applies_explicit_environment_values() -> None:
     assert settings.location == "北京"
     assert settings.timezone == "Asia/Shanghai"
     assert settings.data_source_whitelist == ["weather", "news"]
+    assert settings.source_whitelist == ["people", "bbc"]
     assert settings.push_channels == ["wechat_work"]
     assert settings.auth_token == "secret"
     assert settings.web_require_auth is True
@@ -52,6 +56,7 @@ def test_settings_reads_dotenv_file(tmp_path: Path) -> None:
                 "ASSISTANT_LOCATION=杭州",
                 "ASSISTANT_TIMEZONE=Asia/Shanghai",
                 "ASSISTANT_DATA_SOURCE_WHITELIST=[\"weather\",\"news\"]",
+                "ASSISTANT_SOURCE_WHITELIST=[\"people\",\"bbc\"]",
                 "ASSISTANT_PUSH_CHANNELS=[\"wechat_work\"]",
                 "ASSISTANT_AUTH_TOKEN=dotenv-secret",
             ]
@@ -64,6 +69,7 @@ def test_settings_reads_dotenv_file(tmp_path: Path) -> None:
     assert settings.location == "杭州"
     assert settings.timezone == "Asia/Shanghai"
     assert settings.data_source_whitelist == ["weather", "news"]
+    assert settings.source_whitelist == ["people", "bbc"]
     assert settings.push_channels == ["wechat_work"]
     assert settings.auth_token == "dotenv-secret"
     assert settings.web_require_auth is False
@@ -79,6 +85,7 @@ def test_load_settings_reads_default_toml_from_cwd(
                 'location = "广州"',
                 'timezone = "Asia/Shanghai"',
                 'data_source_whitelist = ["weather"]',
+                'source_whitelist = ["people"]',
                 'push_channels = ["wechat_work"]',
             ]
         ),
@@ -90,6 +97,7 @@ def test_load_settings_reads_default_toml_from_cwd(
 
     assert settings.location == "广州"
     assert settings.data_source_whitelist == ["weather"]
+    assert settings.source_whitelist == ["people"]
     assert settings.push_channels == ["wechat_work"]
 
 
@@ -101,6 +109,7 @@ def test_load_settings_reads_toml_config_file(tmp_path: Path) -> None:
                 'location = "深圳"',
                 'timezone = "Asia/Shanghai"',
                 'data_source_whitelist = ["weather", "news"]',
+                'source_whitelist = ["people", "bbc"]',
                 'push_channels = ["wechat_work"]',
                 'auth_token = "file-secret"',
                 'web_require_auth = true',
@@ -114,6 +123,7 @@ def test_load_settings_reads_toml_config_file(tmp_path: Path) -> None:
     assert settings.location == "深圳"
     assert settings.timezone == "Asia/Shanghai"
     assert settings.data_source_whitelist == ["weather", "news"]
+    assert settings.source_whitelist == ["people", "bbc"]
     assert settings.push_channels == ["wechat_work"]
     assert settings.auth_token == "file-secret"
     assert settings.web_require_auth is True
@@ -164,6 +174,7 @@ def test_settings_is_a_public_value_object() -> None:
         location="深圳",
         timezone="Asia/Shanghai",
         data_source_whitelist=["weather"],
+        source_whitelist=["people"],
         push_channels=["wechat_work"],
         auth_token="local-secret",
     )
@@ -171,5 +182,6 @@ def test_settings_is_a_public_value_object() -> None:
     assert settings.location == "深圳"
     assert settings.timezone == "Asia/Shanghai"
     assert settings.data_source_whitelist == ["weather"]
+    assert settings.source_whitelist == ["people"]
     assert settings.push_channels == ["wechat_work"]
     assert settings.auth_token == "local-secret"
