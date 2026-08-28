@@ -31,4 +31,4 @@ assistant = ["templates/*.html"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-addopts = "-q"
+addopts = "--tb=short"
