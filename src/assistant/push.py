@@ -28,6 +28,7 @@ class PushResult:
     fallback: bool = False
     channel: str = ""
     short_code: str = ""
+    retryable: bool = True
 
 
 class PushConfigurationError(ValueError):
@@ -91,6 +92,7 @@ class PushPlusPushAdapter(PushAdapter):
                 mode="failed",
                 channel="pushplus",
                 message="PushPlus 配置缺失：pushplus_token",
+                retryable=False,
             )
         try:
             response = self.client.post(
@@ -139,6 +141,7 @@ class PushPlusPushAdapter(PushAdapter):
             channel="pushplus",
             message=message,
             errcode=code,
+            retryable=False,
         )
 
     @staticmethod
@@ -183,6 +186,7 @@ class WeComGroupWebhookPushAdapter(PushAdapter):
                 mode="failed",
                 channel="wecom_group",
                 message="企业微信群机器人配置缺失：wecom_group_webhook",
+                retryable=False,
             )
         if "/cgi-bin/webhook/send" not in self.webhook:
             return PushResult(
@@ -190,6 +194,7 @@ class WeComGroupWebhookPushAdapter(PushAdapter):
                 mode="failed",
                 channel="wecom_group",
                 message="企业微信群机器人 Webhook URL 格式不正确",
+                retryable=False,
             )
         try:
             response = self.client.post(
@@ -232,6 +237,7 @@ class WeComGroupWebhookPushAdapter(PushAdapter):
             channel="wecom_group",
             message=message,
             errcode=errcode,
+            retryable=False,
         )
 
     @staticmethod
@@ -478,6 +484,9 @@ class PushChainAdapter(PushAdapter):
             mode="failed",
             message=message,
             channel=failures[-1].channel if failures else "",
+            errcode=failures[-1].errcode if failures else None,
+            short_code=failures[-1].short_code if failures else "",
+            retryable=failures[-1].retryable if failures else True,
         )
 
     def _log_failure(self, message: str) -> None:

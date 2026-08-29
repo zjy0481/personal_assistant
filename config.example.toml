@@ -24,6 +24,10 @@ wecom_group_webhook = ""
 # 本地验证可设为 true，使用 mock 适配器，不调用真实推送 API。
 push_mock = false
 
+# 日报生成或推送请求未成功接受时的重试配置。
+daily_retry_max = 3
+daily_retry_interval_seconds = 30
+
 # 以下为企业微信自建应用遗留配置，仅供旧 WeComPushAdapter 使用；新方案不需要。
 wecom_corpid = ""
 wecom_agentid = ""

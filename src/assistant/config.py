@@ -64,6 +64,8 @@ class Settings(BaseSettings):
     wecom_group_webhook: str = ""
     push_max_items: int = Field(default=5, ge=1, le=50)
     push_mock: bool = False
+    daily_retry_max: int = Field(default=3, ge=1, le=10)
+    daily_retry_interval_seconds: int = Field(default=30, ge=1, le=600)
     auth_token: str = ""
     web_require_auth: bool = False
     wecom_corpid: str = ""

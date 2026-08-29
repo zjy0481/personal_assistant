@@ -1,6 +1,11 @@
 {% extends "base.html" %}
 {% block content %}
 <h1>个人助手日报</h1>
+{% if run_status %}
+<p><strong>最近一次运行：{{ run_status.status }}</strong>
+{% if run_status.channel %} · 渠道：{{ run_status.channel }}{% endif %}
+{% if run_status.message %} · {{ run_status.message }}{% endif %}</p>
+{% endif %}
 {% if report %}
   <h2>{{ report.title }}</h2>
   <p>地区：{{ report.location }} · 生成时间：{{ report.generated_at }}</p>

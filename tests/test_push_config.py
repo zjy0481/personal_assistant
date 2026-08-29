@@ -52,6 +52,16 @@ def test_load_settings_reads_pushplus_and_webhook_from_env() -> None:
     assert settings.push_mock is False
 
 
+def test_settings_carries_daily_retry_configuration() -> None:
+    settings = Settings(
+        location="上海",
+        timezone="Asia/Shanghai",
+        daily_retry_max=3,
+        daily_retry_interval_seconds=30,
+    )
+    assert settings.daily_retry_max == 3
+    assert settings.daily_retry_interval_seconds == 30
+
 def test_push_max_items_must_be_positive() -> None:
     with pytest.raises(ConfigurationError):
         load_settings(env={"ASSISTANT_PUSH_MAX_ITEMS": "0"})

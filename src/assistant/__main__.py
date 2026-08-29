@@ -19,12 +19,17 @@ def main() -> int:
         choices=["web", "daily"],
         help="启动网页服务或生成并推送日报",
     )
+    parser.add_argument(
+        "--force",
+        action="store_true",
+        help="强制重新生成并覆盖当日日报快照",
+    )
     args = parser.parse_args()
 
     if args.command == "daily":
         from assistant.daily import run_daily
 
-        result = run_daily()
+        result = run_daily(force=args.force)
         print(f"推送结果：{'成功' if result.success else '失败'}")
         print(result.message)
         if result.channel:

@@ -14,7 +14,7 @@
 2. **企业微信群机器人 Webhook 作为备用渠道**，PushPlus 失败时按顺序尝试。
 3. 推送渠道使用 `push_channels` 顺序列表表达，默认顺序为 `["pushplus", "wecom_group"]`。
 4. 日报正文统一使用 Markdown：天气、新闻、GitHub、AI 每个板块默认推送 5 条，具体条数由 `push_max_items` 配置。
-5. 第一阶段通过 GitHub Actions 每天 08:30（Asia/Shanghai）生成并推送日报；后续若租赁服务器，将同一入口迁移为服务器定时任务。
+5. 第一阶段通过 GitHub Actions 每天 08:00（Asia/Shanghai）生成并推送日报；后续若租赁服务器，将同一入口迁移为服务器定时任务。
 6. V1 将 PushPlus 返回的 `code=200` 与 `shortCode` 记录下来，并支持首次真实推送后人工确认；待有固定出口 IP 的服务器环境后再接入 `sendMessageResult` 查询或回调校验。
 7. 现有 `WeComPushAdapter` 保留为遗留/可选的自建应用适配器，不再作为默认渠道；全新实现新增 PushPlus 与群机器人适配器。
 

@@ -9,7 +9,7 @@ from fastapi.templating import Jinja2Templates
 
 from assistant.config import Settings
 from assistant.models import report_to_dict
-from assistant.storage import SnapshotStore
+from assistant.storage import RunStatus, SnapshotStore
 
 TEMPLATE_DIR = Path(__file__).resolve().parent / "templates"
 
@@ -51,7 +51,10 @@ def create_app(
         return templates.TemplateResponse(
             request,
             "home.html",
-            {"report": _latest_report(app)},
+            {
+                "report": _latest_report(app),
+                "run_status": _latest_run_status(app),
+            },
         )
 
     @app.get("/weather")
@@ -94,3 +97,8 @@ def _latest_report(app: FastAPI) -> dict | None:
         return None
     report = app.state.store.load_latest()
     return report_to_dict(report) if report is not None else None
+
+def _latest_run_status(app: FastAPI) -> RunStatus | None:
+    if app.state.store is None:
+        return None
+    return app.state.store.load_latest_run_status()
