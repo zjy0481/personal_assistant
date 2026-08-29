@@ -95,3 +95,43 @@ PushPlus 接口返回 `code=200` 只表示请求已接受，仍需在微信中�
 - [CONTEXT.md](CONTEXT.md)：领域术语与 V1 边界。
 - [docs/adr/0003-pushplus-push-channel.md](docs/adr/0003-pushplus-push-channel.md)：推送渠道决策。
 - [docs/acceptance.md](docs/acceptance.md)：V1 验收清单。
+## V2 Phase 1：网页端、LLM 摘要与问答
+
+### 后端配置
+
+在 `.env` 中补充 DeepSeek 配置：
+
+```dotenv
+ASSISTANT_LLM_API_KEY=你的DeepSeek API Key
+ASSISTANT_LLM_BASE_URL=https://api.deepseek.com
+ASSISTANT_LLM_MODEL=deepseek-v4-flash
+ASSISTANT_LLM_SUMMARY_ENABLED=true
+```
+
+默认摘要与问答共用每日 300 次、每分钟 10 次限制；连续失败 3 次后熔断。
+
+### 前端构建与运行
+
+```powershell
+cd web
+npm install
+npm run build
+```
+
+回到项目根目录启动后端：
+
+```powershell
+uv run python -m assistant
+```
+
+访问 `http://127.0.0.1:8000/app` 查看新 React 仪表盘；现有 `/`、`/weather` 等 Jinja 页面仍保留为兼容入口。
+
+开发模式下可分别运行：
+
+```powershell
+uv run python -m uvicorn assistant.main:app --port 8000
+cd web
+npm run dev
+```
+
+Vite 开发服务默认运行在 `http://127.0.0.1:5173/`，并把 `/api` 代理到 `http://127.0.0.1:8000`。

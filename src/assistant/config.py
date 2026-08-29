@@ -74,6 +74,19 @@ class Settings(BaseSettings):
     wecom_userid: str = ""
     web_url: str = "http://127.0.0.1:8000/"
     wecom_mock: bool = False
+    llm_provider: str = "deepseek"
+    llm_api_key: str = ""
+    llm_base_url: str = "https://api.deepseek.com"
+    llm_model: str = "deepseek-v4-flash"
+    llm_timeout_seconds: int = Field(default=30, ge=1, le=300)
+    llm_daily_limit: int = Field(default=300, ge=1)
+    llm_minute_limit: int = Field(default=10, ge=1)
+    llm_failure_threshold: int = Field(default=3, ge=1, le=10)
+    llm_circuit_breaker_seconds: int = Field(default=60, ge=1)
+    llm_summary_enabled: bool = True
+    llm_max_items: int = Field(default=50, ge=1, le=200)
+    llm_chat_history_limit: int = Field(default=50, ge=1, le=100)
+    llm_chat_retention_days: int = Field(default=7, ge=1, le=90)
 
     @field_validator("location")
     @classmethod

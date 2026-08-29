@@ -45,3 +45,17 @@ auth_token = ""
 
 # 公网部署时设为 true；此时 auth_token 不能为空。
 web_require_auth = false
+# V2 Phase 1：DeepSeek LLM 摘要与网页问答。
+# llm_api_key 建议只放在 .env，不要提交到 Git；offline/mock 模式不需要真实 Key。
+llm_provider = "deepseek"
+llm_base_url = "https://api.deepseek.com"
+llm_model = "deepseek-v4-flash"
+llm_timeout_seconds = 30
+llm_daily_limit = 300
+llm_minute_limit = 10
+llm_failure_threshold = 3
+llm_circuit_breaker_seconds = 60
+llm_summary_enabled = true
+llm_max_items = 50
+llm_chat_history_limit = 50
+llm_chat_retention_days = 7

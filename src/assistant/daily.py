@@ -7,6 +7,7 @@ from pathlib import Path
 from zoneinfo import ZoneInfo
 
 from assistant.config import Settings, load_settings
+from assistant.llm import create_llm_service
 from assistant.models import Report
 from assistant.push import PushAdapter, PushResult, create_push_adapter
 from assistant.report import ReportBuilder

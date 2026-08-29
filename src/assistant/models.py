@@ -1,5 +1,6 @@
 """Shared domain models for daily report content."""
 
+import hashlib
 from dataclasses import dataclass, field
 from datetime import date, datetime
 from typing import Any
@@ -18,10 +19,37 @@ class ContentItem:
     category: str = ""
     stars: int | None = None
     metadata: dict[str, Any] = field(default_factory=dict)
+    item_id: str = ""
+    llm_summary: str = ""
+    summary_status: str = ""
+    summary_model: str = ""
 
     @property
     def content_key(self) -> str:
         return (self.url or self.title).strip().lower()
+
+    @property
+    def stable_id(self) -> str:
+        if self.item_id.strip():
+            return self.item_id.strip()
+        return compute_item_id(
+            title=self.title,
+            url=self.url,
+            source=self.source,
+        )
+
+
+def compute_item_id(title: str, url: str, source: str) -> str:
+    """Return a deterministic 16-character item id.
+
+    URL is preferred because it identifies the same source across daily
+    snapshots. Without a URL, title plus source is used to keep old records
+    stable and reproducible.
+    """
+    seed = (url or "").strip().lower()
+    if not seed:
+        seed = f"{title}|{source}".strip().lower()
+    return hashlib.sha256(seed.encode("utf-8")).hexdigest()[:16]
 
 
 @dataclass
@@ -72,6 +100,10 @@ def content_item_to_dict(item: ContentItem) -> dict[str, Any]:
         "category": item.category,
         "stars": item.stars,
         "metadata": item.metadata,
+        "item_id": item.stable_id,
+        "llm_summary": item.llm_summary,
+        "summary_status": item.summary_status,
+        "summary_model": item.summary_model,
     }
 
 
@@ -112,6 +144,10 @@ def content_item_from_dict(data: dict[str, Any]) -> ContentItem:
         category=data.get("category", ""),
         stars=data.get("stars"),
         metadata=data.get("metadata", {}),
+        item_id=data.get("item_id", ""),
+        llm_summary=data.get("llm_summary", ""),
+        summary_status=data.get("summary_status", ""),
+        summary_model=data.get("summary_model", ""),
     )
 
 
