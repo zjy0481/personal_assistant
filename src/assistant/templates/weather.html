@@ -1,0 +1,26 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>天气</h1>
+{% if report %}
+  <p>{{ report.title }}</p>
+  {% for block in report.blocks %}
+    {% if block.kind == "weather" %}
+      <h2>{{ block.title }}</h2>
+      {% if block.message %}<p>{{ block.message }}</p>{% endif %}
+      {% if block.details.current %}
+        <p>当前 {{ block.details.current.description }}，温度 {{ block.details.current.temperature }}°C，
+          湿度 {{ block.details.current.humidity }}%，风速 {{ block.details.current.wind_speed }} km/h，
+          AQI {{ block.details.current.air_quality_aqi }}。</p>
+      {% endif %}
+      <ul>
+        {% for day in block.details.days %}
+        <li>{{ day.date }}：{{ day.description }}，{{ day.temp_min }}°C ~ {{ day.temp_max }}°C，
+            降水概率 {{ day.precipitation_probability }}%</li>
+        {% endfor %}
+      </ul>
+    {% endif %}
+  {% endfor %}
+{% else %}
+  <p>暂无日报快照。</p>
+{% endif %}
+{% endblock %}
