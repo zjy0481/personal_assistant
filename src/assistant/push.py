@@ -1,4 +1,4 @@
-"""Daily report push adapters and ordered channel fallback chain."""
+"""Daily report and weather warning push adapters with channel fallback."""
 
 import logging
 from collections.abc import Callable, Sequence
@@ -9,8 +9,8 @@ from typing import Any
 import httpx
 
 from assistant.config import Settings
-from assistant.message import render_push_markdown
-from assistant.models import Report
+from assistant.message import render_push_markdown, render_weather_alert_markdown
+from assistant.models import Report, WeatherAlert
 
 logger = logging.getLogger(__name__)
 DEFAULT_WEB_URL = "http://127.0.0.1:8000/"
@@ -19,7 +19,7 @@ PUSHPLUS_URL = "https://www.pushplus.plus/send"
 
 @dataclass
 class PushResult:
-    """Outcome of one report push attempt."""
+    """Outcome of one report or warning push attempt."""
 
     success: bool
     mode: str
@@ -45,6 +45,9 @@ class PushAdapter:
     def send_report(self, report: Report) -> PushResult:
         raise NotImplementedError
 
+    def send_weather_alert(self, alert: WeatherAlert) -> PushResult:
+        raise NotImplementedError
+
 
 class MockPushAdapter(PushAdapter):
     """Deterministic adapter used for local validation."""
@@ -60,9 +63,12 @@ class MockPushAdapter(PushAdapter):
     def send_report(self, report: Report) -> PushResult:
         return self.result
 
+    def send_weather_alert(self, alert: WeatherAlert) -> PushResult:
+        return self.result
+
 
 class PushPlusPushAdapter(PushAdapter):
-    """Send a report through PushPlus WeChat service account."""
+    """Send a report or warning through PushPlus WeChat service account."""
 
     def __init__(
         self,
@@ -72,6 +78,7 @@ class PushPlusPushAdapter(PushAdapter):
         token: str | None = None,
         max_items: int | None = None,
         url: str | None = None,
+        web_url: str | None = None,
     ) -> None:
         self.client = client or httpx.Client(
             timeout=10.0,
@@ -84,6 +91,7 @@ class PushPlusPushAdapter(PushAdapter):
             else (settings.push_max_items if settings else 5)
         )
         self.url = url or PUSHPLUS_URL
+        self.web_url = web_url or (settings.web_url if settings else "")
 
     def send_report(self, report: Report) -> PushResult:
         if not self.token:
@@ -144,6 +152,59 @@ class PushPlusPushAdapter(PushAdapter):
             retryable=False,
         )
 
+    def send_weather_alert(self, alert: WeatherAlert) -> PushResult:
+        if not self.token:
+            return PushResult(
+                success=False,
+                mode="failed",
+                channel="pushplus",
+                message="PushPlus 配置缺失：pushplus_token",
+                retryable=False,
+            )
+        try:
+            response = self.client.post(
+                self.url,
+                json={
+                    "token": self.token,
+                    "title": f"极端天气预警：{alert.location}{alert.alert_type}",
+                    "content": render_weather_alert_markdown(
+                        alert,
+                        event_type=alert.event_type or "initial",
+                        web_url=self.web_url,
+                    ),
+                    "template": "markdown",
+                    "channel": "wechat",
+                },
+            )
+            response.raise_for_status()
+            body = self._parse_response(response)
+        except Exception as exc:
+            logger.error("PushPlus 预警推送失败: %s", exc)
+            return PushResult(
+                success=False,
+                mode="failed",
+                channel="pushplus",
+                message=f"PushPlus 请求失败: {exc}",
+            )
+        code = int(body.get("code", -1))
+        if code == 200:
+            return PushResult(
+                success=True,
+                mode="pushplus",
+                channel="pushplus",
+                message="PushPlus 预警已接受，请等待微信送达",
+                errcode=code,
+                short_code=str(body.get("data", "")),
+            )
+        return PushResult(
+            success=False,
+            mode="failed",
+            channel="pushplus",
+            message=f"PushPlus 返回 code={code}, msg={body.get('msg', '')}",
+            errcode=code,
+            retryable=False,
+        )
+
     @staticmethod
     def _parse_response(response: httpx.Response) -> dict[str, Any]:
         try:
@@ -154,9 +215,8 @@ class PushPlusPushAdapter(PushAdapter):
             raise PushError("PushPlus 响应不是 JSON 对象")
         return payload
 
-
 class WeComGroupWebhookPushAdapter(PushAdapter):
-    """Send a report through an Enterprise WeChat group robot webhook."""
+    """Send a report or warning through an Enterprise WeChat group webhook."""
 
     def __init__(
         self,
@@ -165,6 +225,7 @@ class WeComGroupWebhookPushAdapter(PushAdapter):
         client: httpx.Client | None = None,
         webhook: str | None = None,
         max_items: int | None = None,
+        web_url: str | None = None,
     ) -> None:
         self.client = client or httpx.Client(
             timeout=10.0,
@@ -178,6 +239,7 @@ class WeComGroupWebhookPushAdapter(PushAdapter):
             if max_items is not None
             else (settings.push_max_items if settings else 5)
         )
+        self.web_url = web_url or (settings.web_url if settings else "")
 
     def send_report(self, report: Report) -> PushResult:
         if not self.webhook:
@@ -202,7 +264,11 @@ class WeComGroupWebhookPushAdapter(PushAdapter):
                 json={
                     "msgtype": "markdown",
                     "markdown": {
-                        "content": render_push_markdown(report, self.max_items, max_bytes=4096),
+                        "content": render_push_markdown(
+                            report,
+                            self.max_items,
+                            max_bytes=4096,
+                        ),
                     },
                 },
             )
@@ -216,7 +282,6 @@ class WeComGroupWebhookPushAdapter(PushAdapter):
                 channel="wecom_group",
                 message=f"企业微信群机器人请求失败: {exc}",
             )
-
         errcode = int(body.get("errcode", -1))
         if errcode == 0:
             return PushResult(
@@ -236,6 +301,66 @@ class WeComGroupWebhookPushAdapter(PushAdapter):
             mode="failed",
             channel="wecom_group",
             message=message,
+            errcode=errcode,
+            retryable=False,
+        )
+
+    def send_weather_alert(self, alert: WeatherAlert) -> PushResult:
+        if not self.webhook:
+            return PushResult(
+                success=False,
+                mode="failed",
+                channel="wecom_group",
+                message="企业微信群机器人配置缺失：wecom_group_webhook",
+                retryable=False,
+            )
+        if "/cgi-bin/webhook/send" not in self.webhook:
+            return PushResult(
+                success=False,
+                mode="failed",
+                channel="wecom_group",
+                message="企业微信群机器人 Webhook URL 格式不正确",
+                retryable=False,
+            )
+        try:
+            response = self.client.post(
+                self.webhook,
+                json={
+                    "msgtype": "markdown",
+                    "markdown": {
+                        "content": render_weather_alert_markdown(
+                            alert,
+                            event_type=alert.event_type or "initial",
+                            web_url=self.web_url,
+                            max_bytes=4096,
+                        ),
+                    },
+                },
+            )
+            response.raise_for_status()
+            body = self._parse_response(response)
+        except Exception as exc:
+            logger.error("企业微信群机器人预警推送失败: %s", exc)
+            return PushResult(
+                success=False,
+                mode="failed",
+                channel="wecom_group",
+                message=f"企业微信群机器人请求失败: {exc}",
+            )
+        errcode = int(body.get("errcode", -1))
+        if errcode == 0:
+            return PushResult(
+                success=True,
+                mode="wecom_group",
+                channel="wecom_group",
+                message="企业微信群机器人预警推送成功",
+                errcode=errcode,
+            )
+        return PushResult(
+            success=False,
+            mode="failed",
+            channel="wecom_group",
+            message=f"企业微信群机器人返回 errcode={errcode}, errmsg={body.get('errmsg', '')}",
             errcode=errcode,
             retryable=False,
         )
@@ -294,7 +419,9 @@ class WeComPushAdapter(PushAdapter):
             try:
                 errcode, errmsg = self._send_textcard(token, report)
                 if errcode != 0:
-                    raise PushError(f"企业微信返回错误：code={errcode}, msg={errmsg}")
+                    raise PushError(
+                        f"企业微信返回错误：code={errcode}, msg={errmsg}"
+                    )
             except PushError as exc:
                 logger.warning("textcard 推送失败，尝试 text：%s", exc)
                 errcode, errmsg = self._send_text(token, report)
@@ -310,7 +437,6 @@ class WeComPushAdapter(PushAdapter):
                     errcode=errcode,
                     fallback=True,
                 )
-
             return PushResult(
                 success=True,
                 mode="textcard",
@@ -328,6 +454,15 @@ class WeComPushAdapter(PushAdapter):
                 channel="wechat_work",
                 message=message,
             )
+
+    def send_weather_alert(self, alert: WeatherAlert) -> PushResult:
+        return PushResult(
+            success=False,
+            mode="failed",
+            channel="wechat_work",
+            message="企业微信自建应用暂不支持预警推送，请配置 PushPlus 或群机器人 Webhook",
+            retryable=False,
+        )
 
     def _ensure_configured(self) -> None:
         missing = []
@@ -348,7 +483,6 @@ class WeComPushAdapter(PushAdapter):
         now = datetime.now(timezone.utc)
         if self._access_token and now < self._token_expires_at:
             return self._access_token
-
         response = self.client.get(
             self.TOKEN_URL,
             params={"corpid": self.corpid, "corpsecret": self.secret},
@@ -357,7 +491,8 @@ class WeComPushAdapter(PushAdapter):
         errcode = payload.get("errcode")
         if errcode != 0:
             raise PushError(
-                f"获取 access_token 失败：code={errcode}, msg={payload.get('errmsg')}"
+                f"获取 access_token 失败：code={errcode}, "
+                f"msg={payload.get('errmsg')}"
             )
         self._access_token = payload.get("access_token", "")
         expires_in = int(payload.get("expires_in", 7200))
@@ -486,6 +621,37 @@ class PushChainAdapter(PushAdapter):
             channel=failures[-1].channel if failures else "",
             errcode=failures[-1].errcode if failures else None,
             short_code=failures[-1].short_code if failures else "",
+            retryable=failures[-1].retryable if failures else True,
+        )
+
+    def send_weather_alert(self, alert: WeatherAlert) -> PushResult:
+        failures: list[PushResult] = []
+        for index, adapter in enumerate(self.adapters):
+            try:
+                result = adapter.send_weather_alert(alert)
+            except Exception as exc:
+                logger.error("预警推送渠道异常: %s", exc)
+                result = PushResult(
+                    success=False,
+                    mode="failed",
+                    message=f"预警推送渠道异常: {exc}",
+                )
+            if result.success:
+                result.fallback = index > 0
+                return result
+            failures.append(result)
+
+        message = "所有预警推送渠道均失败: " + "; ".join(
+            item.message or "未知错误" for item in failures
+        )
+        logger.error(message)
+        self.failure_notifier(message)
+        return PushResult(
+            success=False,
+            mode="failed",
+            message=message,
+            channel=failures[-1].channel if failures else "",
+            errcode=failures[-1].errcode if failures else None,
             retryable=failures[-1].retryable if failures else True,
         )
 

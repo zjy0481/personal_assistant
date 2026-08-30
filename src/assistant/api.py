@@ -11,7 +11,11 @@ from fastapi import FastAPI, HTTPException, Query, Request
 from pydantic import BaseModel, Field
 
 from assistant.llm import LLMError, LLMNotConfiguredError
-from assistant.models import report_to_dict
+from assistant.models import (
+    report_to_dict,
+    weather_alert_event_to_dict,
+    weather_alert_to_dict,
+)
 from assistant.storage import SnapshotStore
 
 _LINK_RE = re.compile(r"\[([^\]]+)\]\((https?://[^)]+)\)")
@@ -126,6 +130,45 @@ def register_api_routes(
             "llm_model": settings.llm_model,
         }
 
+
+    @app.get("/api/weather-alerts")
+    def weather_alerts(
+        request: Request,
+        status: str | None = Query(default=None, max_length=20),
+        location: str | None = Query(default=None, max_length=100),
+        alert_type: str | None = Query(default=None, max_length=50),
+        limit: int = Query(default=200, ge=1, le=1000),
+        event_limit: int = Query(default=200, ge=1, le=1000),
+    ) -> dict[str, Any]:
+        active_store = _store(store)
+        alerts = active_store.list_weather_alerts(
+            location=location,
+            alert_type=alert_type,
+            status=status,
+            limit=limit,
+        )
+        events = active_store.list_weather_alert_events(
+            location=location,
+            alert_type=alert_type,
+            limit=event_limit,
+        )
+        run = active_store.load_latest_weather_alert_run()
+        return {
+            "alerts": [weather_alert_to_dict(alert) for alert in alerts],
+            "events": [
+                weather_alert_event_to_dict(event) for event in events
+            ],
+            "run": {
+                "id": run.id,
+                "checked_at": run.checked_at.isoformat() if run.checked_at else "",
+                "status": run.status,
+                "source": run.source,
+                "alert_count": run.alert_count,
+                "fallback": run.fallback,
+                "message": run.message,
+                "created_at": run.created_at.isoformat() if run.created_at else "",
+            } if run else None,
+        }
 
 def _extract_citations(answer: str) -> list[dict[str, str]]:
     result: list[dict[str, str]] = []

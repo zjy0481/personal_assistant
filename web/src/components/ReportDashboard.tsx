@@ -1,4 +1,4 @@
-import type { ContentBlock, ContentItem, Report, RunStatus } from '../types'
+import type { ContentBlock, ContentItem, Report, RunStatus, WeatherAlert, WeatherAlertEvent, WeatherAlertRun } from '../types'
 import { EmptyState } from './EmptyState'
 import { ItemCard } from './ItemCard'
 import { StatusPill } from './StatusPill'
@@ -9,6 +9,9 @@ interface ReportDashboardProps {
   report: Report
   view: View
   runStatus: RunStatus | null
+  weatherAlerts: WeatherAlert[]
+  weatherEvents: WeatherAlertEvent[]
+  weatherRun: WeatherAlertRun | null
   onAsk: (item: ContentItem) => void
 }
 
@@ -16,6 +19,9 @@ export function ReportDashboard({
   report,
   view,
   runStatus,
+  weatherAlerts,
+  weatherEvents,
+  weatherRun,
   onAsk,
 }: ReportDashboardProps) {
   const visibleBlocks = filterBlocks(report.blocks, view)
@@ -54,6 +60,14 @@ export function ReportDashboard({
         </div>
       </header>
 
+      {(view === 'weather' || view === 'dashboard') && (
+        <WeatherAlertPanel
+          alerts={weatherAlerts}
+          events={weatherEvents}
+          run={weatherRun}
+        />
+      )}
+
       {visibleBlocks.length === 0 ? (
         <EmptyState title="暂无内容" description="当前日报没有对应板块，等待下一次生成。" />
       ) : (
@@ -64,6 +78,118 @@ export function ReportDashboard({
         </div>
       )}
     </div>
+  )
+}
+
+function WeatherAlertPanel({
+  alerts,
+  events,
+  run,
+}: {
+  alerts: WeatherAlert[]
+  events: WeatherAlertEvent[]
+  run: WeatherAlertRun | null
+}) {
+  const active = alerts.filter((alert) => alert.status === 'active')
+  const timeline = events.slice(0, 30)
+
+  return (
+    <section className="mb-8 overflow-hidden rounded-2xl border border-amber-200 bg-amber-50/70 p-6 shadow-sm">
+      <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h2 className="text-lg font-semibold text-slate-900">极端天气预警</h2>
+          <p className="mt-1 text-xs text-slate-500">
+            {active.length > 0 ? `当前生效 ${active.length} 条` : '当前没有生效预警'}
+            {run ? ` · 最近检查 ${formatDateTime(run.checked_at)}` : ''}
+            {run?.fallback ? ' · 备用源' : ''}
+          </p>
+        </div>
+        <span className="rounded-full bg-white px-2.5 py-1 text-xs font-medium text-amber-700 shadow-sm">
+          {run ? statusLabel(run.status) : '暂无检查记录'}
+        </span>
+      </div>
+
+      {active.length > 0 ? (
+        <div className="grid gap-4 md:grid-cols-2">
+          {active.map((alert) => (
+            <article key={`${alert.location}-${alert.alert_type}`} className="rounded-xl border border-amber-200/80 bg-white p-4">
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <h3 className="font-semibold text-slate-900">{alert.title || `${alert.alert_type}预警`}</h3>
+                  <p className="mt-1 text-xs text-slate-500">
+                    {alert.location} · {sourceLabel(alert.source)} · {formatDateTime(alert.published_at)}
+                  </p>
+                </div>
+                <span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${levelClass(alert.level)}`}>
+                  {alert.level}
+                </span>
+              </div>
+              {alert.description && (
+                <p className="mt-3 max-h-28 overflow-hidden text-sm leading-relaxed text-slate-600">
+                  {alert.description}
+                </p>
+              )}
+              {alert.safety_guidance && (
+                <div className="mt-3 rounded-lg bg-slate-50 p-3 text-xs leading-relaxed text-slate-500">
+                  <span className="font-medium text-slate-700">防御指南：</span>
+                  {alert.safety_guidance}
+                </div>
+              )}
+              {alert.source_url && (
+                <a
+                  href={alert.source_url}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="mt-3 inline-block text-sm font-medium text-emerald-700 hover:text-emerald-600"
+                >
+                  查看官方预警原文 →
+                </a>
+              )}
+            </article>
+          ))}
+        </div>
+      ) : (
+        <p className="rounded-xl border border-dashed border-amber-200 bg-white/70 px-4 py-6 text-center text-sm text-slate-500">
+          暂无生效预警。监测服务会在配置地区出现极端天气时主动更新并推送。
+        </p>
+      )}
+
+      <div className="mt-6">
+        <h3 className="mb-2 text-sm font-semibold text-slate-700">预警时间线</h3>
+        {timeline.length > 0 ? (
+          <div className="overflow-x-auto rounded-xl bg-white shadow-sm">
+            <table className="w-full min-w-[640px] text-left text-sm">
+              <thead>
+                <tr className="border-b border-slate-100 text-xs text-slate-400">
+                  <th className="px-4 py-3 font-medium">时间</th>
+                  <th className="px-4 py-3 font-medium">事件</th>
+                  <th className="px-4 py-3 font-medium">地区</th>
+                  <th className="px-4 py-3 font-medium">类型</th>
+                  <th className="px-4 py-3 font-medium">等级</th>
+                  <th className="px-4 py-3 font-medium">来源</th>
+                  <th className="px-4 py-3 font-medium">推送</th>
+                </tr>
+              </thead>
+              <tbody>
+                {timeline.map((event) => (
+                  <tr key={event.event_id} className="border-b border-slate-100 last:border-b-0">
+                    <td className="whitespace-nowrap px-4 py-3 text-slate-600">{formatDateTime(event.occurred_at)}</td>
+                    <td className="px-4 py-3 font-medium text-slate-700">{eventLabel(event.event_type)}</td>
+                    <td className="px-4 py-3 text-slate-600">{event.location}</td>
+                    <td className="px-4 py-3 text-slate-600">{event.alert_type}</td>
+                    <td className="px-4 py-3"><span className={`rounded-full px-2 py-0.5 text-xs font-medium ${levelClass(event.level)}`}>{event.level}</span></td>
+                    <td className="px-4 py-3 text-slate-500">{sourceLabel(event.source)}</td>
+                    <td className="px-4 py-3 text-slate-500">{pushLabel(event.push_status)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ) : (
+          <p className="text-sm text-slate-500">暂无时间线记录。</p>
+        )}
+      </div>
+    </section>
   )
 }
 
@@ -167,7 +293,8 @@ function filterBlocks(blocks: ContentBlock[], view: View) {
   return blocks.filter((block) => block.kind === view)
 }
 
-function formatDateTime(value: string) {
+function formatDateTime(value?: string | null) {
+  if (!value) return '--'
   const date = new Date(value)
   if (Number.isNaN(date.getTime())) return value
   return date.toLocaleString('zh-CN', {
@@ -179,13 +306,48 @@ function formatDateTime(value: string) {
   })
 }
 
-function statusLabel(status: string) {
+function statusLabel(status?: string) {
   const labels: Record<string, string> = {
     ok: '成功',
     failed: '失败',
     skipped: '已跳过',
     pushplus: '已推送',
     wecom_group: '已推送',
+    paused: '已暂停',
   }
-  return labels[status] ?? status
+  return labels[status ?? ''] ?? status ?? '未知'
+}
+
+function eventLabel(type: string) {
+  const labels: Record<string, string> = {
+    initial: '首次发布',
+    upgraded: '等级升级',
+    downgraded: '等级降级',
+    cancelled: '已解除',
+    updated: '更新',
+  }
+  return labels[type] ?? type
+}
+
+function pushLabel(status: string) {
+  if (status === 'pushed') return '已推送'
+  if (status === 'pending' || status === 'failed') return '待重试'
+  return '无需推送'
+}
+
+function sourceLabel(source: string) {
+  const labels: Record<string, string> = {
+    nmc: '中央气象台',
+    qweather: '和风天气',
+  }
+  return labels[source] ?? source
+}
+function levelClass(level: string) {
+  const classes: Record<string, string> = {
+    '蓝色': 'bg-blue-50 text-blue-700',
+    '黄色': 'bg-amber-50 text-amber-700',
+    '橙色': 'bg-orange-50 text-orange-700',
+    '红色': 'bg-red-50 text-red-700',
+  }
+  return classes[level] ?? 'bg-slate-50 text-slate-600'
 }

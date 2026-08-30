@@ -32,6 +32,9 @@ def create_app(
             store.delete_expired_chat_messages(
                 settings.llm_chat_retention_days
             )
+            store.delete_expired_weather_alerts(
+                settings.weather_alert_retention_days
+            )
         yield
 
     app = FastAPI(title="Personal Assistant", lifespan=lifespan)

@@ -1,10 +1,10 @@
 import { useEffect, useState } from 'react'
-import { getLatestReport, getRunStatus, getStatus } from './api'
+import { getLatestReport, getRunStatus, getStatus, getWeatherAlerts } from './api'
 import { AppShell } from './components/AppShell'
 import { ChatPanel } from './components/ChatPanel'
 import { EmptyState } from './components/EmptyState'
 import { ReportDashboard } from './components/ReportDashboard'
-import type { ContentItem, Report, RunStatus } from './types'
+import type { ContentItem, Report, RunStatus, WeatherAlert, WeatherAlertEvent, WeatherAlertRun } from './types'
 
 type View = 'dashboard' | 'weather' | 'news' | 'github' | 'ai' | 'favorites' | 'trends'
 
@@ -18,6 +18,9 @@ function App() {
   const [view, setView] = useState<View>('dashboard')
   const [report, setReport] = useState<Report | null>(null)
   const [runStatus, setRunStatus] = useState<RunStatus | null>(null)
+  const [weatherAlerts, setWeatherAlerts] = useState<WeatherAlert[]>([])
+  const [weatherEvents, setWeatherEvents] = useState<WeatherAlertEvent[]>([])
+  const [weatherRun, setWeatherRun] = useState<WeatherAlertRun | null>(null)
   const [status, setStatus] = useState<StatusInfo | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
@@ -26,14 +29,18 @@ function App() {
 
   async function refresh() {
     try {
-      const [nextReport, nextStatus, nextRunStatus] = await Promise.all([
+      const [nextReport, nextStatus, nextRunStatus, nextWeather] = await Promise.all([
         getLatestReport(),
         getStatus(),
         getRunStatus(),
+        getWeatherAlerts(),
       ])
       setReport(nextReport)
       setStatus(nextStatus)
       setRunStatus(nextRunStatus)
+      setWeatherAlerts(nextWeather.alerts)
+      setWeatherEvents(nextWeather.events)
+      setWeatherRun(nextWeather.run)
     } catch (err) {
       setError(err instanceof Error ? err.message : '加载失败')
     } finally {
@@ -76,6 +83,9 @@ function App() {
           report={report}
           view={view}
           runStatus={runStatus}
+          weatherAlerts={weatherAlerts}
+          weatherEvents={weatherEvents}
+          weatherRun={weatherRun}
           onAsk={openQuestion}
         />
       ) : (

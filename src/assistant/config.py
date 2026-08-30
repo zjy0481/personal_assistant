@@ -27,6 +27,20 @@ DEFAULT_SOURCE_WHITELIST = [
     "ap",
     "bbc",
 ]
+DEFAULT_WEATHER_ALERT_TYPES = [
+    "台风",
+    "暴雨",
+    "高温",
+    "寒潮",
+    "大风",
+    "雷电",
+    "雷雨大风",
+    "大雾",
+    "沙尘暴",
+    "强对流",
+    "暴雪",
+    "道路结冰",
+]
 
 
 class ConfigurationError(RuntimeError):
@@ -87,6 +101,25 @@ class Settings(BaseSettings):
     llm_max_items: int = Field(default=50, ge=1, le=200)
     llm_chat_history_limit: int = Field(default=50, ge=1, le=100)
     llm_chat_retention_days: int = Field(default=7, ge=1, le=90)
+    weather_alert_enabled: bool = True
+    weather_alert_locations: list[str] = Field(default_factory=list)
+    weather_alert_interval_seconds: int = Field(default=600, ge=60, le=86400)
+    weather_alert_types: list[str] = Field(default_factory=list)
+    weather_alert_retention_days: int = Field(default=180, ge=1, le=3650)
+    weather_alert_timeout_seconds: int = Field(default=12, ge=3, le=60)
+    weather_alert_retry_max: int = Field(default=3, ge=1, le=10)
+    weather_alert_failure_threshold: int = Field(default=3, ge=1, le=20)
+    weather_alert_failure_pause_minutes: int = Field(
+        default=60,
+        ge=1,
+        le=1440,
+    )
+    qweather_api_key: str = ""
+    qweather_token: str = ""
+    qweather_api_host: str = "https://api.qweather.com"
+    qweather_location_id: str = ""
+    qweather_latitude: float | None = Field(default=None, ge=-90, le=90)
+    qweather_longitude: float | None = Field(default=None, ge=-180, le=180)
 
     @field_validator("location")
     @classmethod
@@ -110,6 +143,8 @@ class Settings(BaseSettings):
         "data_source_whitelist",
         "source_whitelist",
         "push_channels",
+        "weather_alert_locations",
+        "weather_alert_types",
         mode="before",
     )
     @classmethod
@@ -141,7 +176,21 @@ class Settings(BaseSettings):
                 "公网访问要求鉴权（web_require_auth=true），"
                 "但未配置 auth_token"
             )
+        if (self.qweather_latitude is None) != (
+            self.qweather_longitude is None
+        ):
+            raise ValueError(
+                "qweather_latitude 和 qweather_longitude 必须同时配置"
+            )
         return self
+
+    @property
+    def alert_locations(self) -> list[str]:
+        return list(self.weather_alert_locations) or [self.location]
+
+    @property
+    def active_weather_alert_types(self) -> list[str]:
+        return list(self.weather_alert_types) or list(DEFAULT_WEATHER_ALERT_TYPES)
 
     @classmethod
     def settings_customise_sources(

@@ -134,4 +134,78 @@ cd web
 npm run dev
 ```
 
-Vite 开发服务默认运行在 `http://127.0.0.1:5173/`，并把 `/api` 代理到 `http://127.0.0.1:8000`。
+Vite 开发服务默认运行在 `http://127.0.0.1:5173/`，并把 `/api` 代理到 `http://127.0.0.1:8000`。## V2 Phase 2：极端天气预警主动推送
+
+预警监测作为独立进程运行，不受每日 08:00 限制。主源为中央气象台/中国天气网公开实时接口，备用源为和风天气；默认每 10 分钟检查一次，首次发布和等级升级时通过 PushPlus（企业微信群机器人备用）推送，降级与解除只更新网页时间线。
+
+### 配置
+
+在 `config.toml` 或 `.env` 中设置：
+
+```toml
+weather_alert_enabled = true
+weather_alert_locations = []
+weather_alert_interval_seconds = 600
+weather_alert_types = []
+weather_alert_retention_days = 180
+qweather_api_key = ""
+qweather_token = ""
+qweather_api_host = "https://api.qweather.com"
+qweather_location_id = ""
+```
+
+`weather_alert_locations` 留空时使用 `location`；和风备用源只有在配置 Key/JWT 后才会启用。
+
+### 运行
+
+单次检查（适合测试）：
+
+```powershell
+uv run python -m assistant alerts --once
+```
+
+常驻监测：
+
+```powershell
+uv run python -m assistant alerts
+```
+
+根据实际部署服务器配置 systemd、supervisor 或其他进程托管服务。预警监测失败写入 `weather_alert_runs`，网页天气页可查看当前生效预警和完整时间线。
+
+Windows PowerShell 下使用 `uv run` 时，按 `Ctrl+C` 后可能仍出现“终止批处理操作吗(Y/N)？”提示，这是 `uv`/PowerShell 包装行为，不是程序 traceback；按 `Y` 即可。若希望更干净的退出，可改用：
+
+```powershell
+.venv\Scripts\python.exe -m assistant alerts
+```
+
+监测启动后会打印启动时间和每次检查结果，并显示源、预警数、推送数及下次检查时间。
+
+### 手动验证预警流程
+
+即使当前地区没有真实预警，也可以用模拟预警完整测试首次发布、重复轮询、等级升级、降级和解除：
+
+```powershell
+uv run python tests/manual_alert_flow.py
+```
+
+脚本默认使用临时数据库和模拟推送，不会发送真实消息，也不会修改 `data/assistant.db`。如果确实要验证推送链路，可以读取当前配置并调用真实推送渠道：
+
+```powershell
+uv run python tests/manual_alert_flow.py --live
+```
+
+也可以通过 `--location` 和 `--alert-type` 指定测试地区与预警类型。
+
+直接用当前有存活预警的地区验证真实国家气象中心解析：
+
+```powershell
+uv run python tests/check_real_nmc_warning.py --location 金寨
+```
+
+若同时验证真实推送链路：
+
+```powershell
+uv run python tests/check_real_nmc_warning.py --location 金寨 --live
+```
+
+注意：`--live` 会真实发送消息；`manual_alert_flow.py --live` 会发送首次发布和升级两条，真实 NMC 检查会按当前生效预警各发送一条，请避免重复运行。

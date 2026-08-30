@@ -77,6 +77,70 @@ class Report:
     degraded: bool = False
 
 
+@dataclass
+class WeatherAlert:
+    """One active or historical extreme weather warning for a location."""
+
+    alert_id: str
+    location: str
+    alert_type: str
+    level: str
+    title: str = ""
+    description: str = ""
+    safety_guidance: str = ""
+    status: str = "active"
+    event_type: str = ""
+    published_at: datetime | None = None
+    started_at: datetime | None = None
+    ended_at: datetime | None = None
+    source: str = ""
+    source_url: str = ""
+    raw: dict[str, Any] = field(default_factory=dict)
+    push_status: str = ""
+    push_attempts: int = 0
+    pushed_at: datetime | None = None
+    first_seen_at: datetime | None = None
+    updated_at: datetime | None = None
+    last_event_id: int = 0
+
+
+@dataclass
+class WeatherAlertEvent:
+    """One state transition in the warning timeline."""
+
+    event_id: int
+    alert_id: str
+    location: str
+    alert_type: str
+    level: str
+    event_type: str
+    title: str = ""
+    description: str = ""
+    safety_guidance: str = ""
+    source: str = ""
+    source_url: str = ""
+    occurred_at: datetime | None = None
+    created_at: datetime | None = None
+    raw: dict[str, Any] = field(default_factory=dict)
+    push_status: str = ""
+    pushed_at: datetime | None = None
+    push_channel: str = ""
+
+
+@dataclass
+class WeatherAlertRun:
+    """Diagnostic record for one warning source check."""
+
+    checked_at: datetime | None = None
+    status: str = "ok"
+    source: str = ""
+    alert_count: int = 0
+    fallback: bool = False
+    message: str = ""
+    created_at: datetime | None = None
+    id: int = 0
+
+
 def _encode(value: Any) -> Any:
     if isinstance(value, (datetime, date)):
         return value.isoformat()
@@ -175,3 +239,88 @@ def report_from_dict(data: dict[str, Any]) -> Report:
         blocks=[content_block_from_dict(item) for item in data["blocks"]],
         degraded=bool(data.get("degraded", False)),
     )
+
+
+def _datetime_value(value: Any) -> datetime | None:
+    if isinstance(value, datetime):
+        return value
+    if isinstance(value, str) and value:
+        try:
+            return datetime.fromisoformat(value)
+        except ValueError:
+            return None
+    return None
+
+
+def weather_alert_to_dict(alert: WeatherAlert) -> dict[str, Any]:
+    return {
+        "alert_id": alert.alert_id,
+        "location": alert.location,
+        "alert_type": alert.alert_type,
+        "level": alert.level,
+        "title": alert.title,
+        "description": alert.description,
+        "safety_guidance": alert.safety_guidance,
+        "status": alert.status,
+        "event_type": alert.event_type,
+        "published_at": _encode(alert.published_at),
+        "started_at": _encode(alert.started_at),
+        "ended_at": _encode(alert.ended_at),
+        "source": alert.source,
+        "source_url": alert.source_url,
+        "raw": alert.raw,
+        "push_status": alert.push_status,
+        "push_attempts": alert.push_attempts,
+        "pushed_at": _encode(alert.pushed_at),
+        "first_seen_at": _encode(alert.first_seen_at),
+        "updated_at": _encode(alert.updated_at),
+        "last_event_id": alert.last_event_id,
+    }
+
+
+def weather_alert_from_dict(data: dict[str, Any]) -> WeatherAlert:
+    return WeatherAlert(
+        alert_id=data.get("alert_id", ""),
+        location=data.get("location", ""),
+        alert_type=data.get("alert_type", ""),
+        level=data.get("level", ""),
+        title=data.get("title", ""),
+        description=data.get("description", ""),
+        safety_guidance=data.get("safety_guidance", ""),
+        status=data.get("status", "active"),
+        event_type=data.get("event_type", ""),
+        published_at=_datetime_value(data.get("published_at")),
+        started_at=_datetime_value(data.get("started_at")),
+        ended_at=_datetime_value(data.get("ended_at")),
+        source=data.get("source", ""),
+        source_url=data.get("source_url", ""),
+        raw=data.get("raw", {}),
+        push_status=data.get("push_status", ""),
+        push_attempts=int(data.get("push_attempts", 0) or 0),
+        pushed_at=_datetime_value(data.get("pushed_at")),
+        first_seen_at=_datetime_value(data.get("first_seen_at")),
+        updated_at=_datetime_value(data.get("updated_at")),
+        last_event_id=int(data.get("last_event_id", 0) or 0),
+    )
+
+
+def weather_alert_event_to_dict(event: WeatherAlertEvent) -> dict[str, Any]:
+    return {
+        "event_id": event.event_id,
+        "alert_id": event.alert_id,
+        "location": event.location,
+        "alert_type": event.alert_type,
+        "level": event.level,
+        "event_type": event.event_type,
+        "title": event.title,
+        "description": event.description,
+        "safety_guidance": event.safety_guidance,
+        "source": event.source,
+        "source_url": event.source_url,
+        "occurred_at": _encode(event.occurred_at),
+        "created_at": _encode(event.created_at),
+        "raw": event.raw,
+        "push_status": event.push_status,
+        "pushed_at": _encode(event.pushed_at),
+        "push_channel": event.push_channel,
+    }

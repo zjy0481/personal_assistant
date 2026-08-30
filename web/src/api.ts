@@ -1,4 +1,4 @@
-import type { ChatHistoryItem, ChatResponse, Report, RunStatus } from './types'
+import type { ChatHistoryItem, ChatResponse, Report, RunStatus, WeatherAlert, WeatherAlertEvent, WeatherAlertRun } from './types'
 
 const API_BASE = import.meta.env.VITE_API_BASE ?? ''
 const AUTH_TOKEN =
@@ -62,4 +62,13 @@ export async function getChatHistory(
     `/api/chat/history?session_id=${encodeURIComponent(sessionId)}`,
   )
   return payload.history
+}
+export interface WeatherAlertPayload {
+  alerts: WeatherAlert[]
+  events: WeatherAlertEvent[]
+  run: WeatherAlertRun | null
+}
+
+export async function getWeatherAlerts(): Promise<WeatherAlertPayload> {
+  return request<WeatherAlertPayload>('/api/weather-alerts')
 }

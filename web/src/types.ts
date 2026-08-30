@@ -54,3 +54,64 @@ export interface ChatHistoryItem {
   role: 'user' | 'assistant'
   content: string
 }
+export interface WeatherAlert {
+  alert_id: string
+  location: string
+  alert_type: string
+  level: string
+  title: string
+  description: string
+  safety_guidance: string
+  status: 'active' | 'cancelled'
+  event_type?: string
+  published_at?: string | null
+  started_at?: string | null
+  ended_at?: string | null
+  source: string
+  source_url: string
+  raw?: Record<string, unknown>
+  push_status: string
+  push_attempts: number
+  pushed_at?: string | null
+  first_seen_at?: string | null
+  updated_at?: string | null
+  last_event_id: number
+}
+
+export type WeatherAlertEventType =
+  | 'initial'
+  | 'upgraded'
+  | 'downgraded'
+  | 'cancelled'
+  | 'updated'
+
+export interface WeatherAlertEvent {
+  event_id: number
+  alert_id: string
+  location: string
+  alert_type: string
+  level: string
+  event_type: WeatherAlertEventType
+  title: string
+  description: string
+  safety_guidance: string
+  source: string
+  source_url: string
+  occurred_at?: string | null
+  created_at?: string | null
+  raw?: Record<string, unknown>
+  push_status: string
+  pushed_at?: string | null
+  push_channel: string
+}
+
+export interface WeatherAlertRun {
+  id: number
+  checked_at: string
+  status: string
+  source: string
+  alert_count: number
+  fallback: boolean
+  message: string
+  created_at: string
+}

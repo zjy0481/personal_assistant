@@ -58,4 +58,25 @@ llm_circuit_breaker_seconds = 60
 llm_summary_enabled = true
 llm_max_items = 50
 llm_chat_history_limit = 50
-llm_chat_retention_days = 7
+llm_chat_retention_days = 7# V2 Phase 2：极端天气预警主动推送。
+# 预警监测为独立进程，每 10 分钟检查一次；首次发布和等级升级会推送，降级/解除只更新网页时间线。
+weather_alert_enabled = true
+# 留空时使用上方 location；如需监测多个地区，可改为 ["上海", "北京"]。
+weather_alert_locations = []
+weather_alert_interval_seconds = 600
+# 留空表示监控默认极端天气类型；也可按需缩小范围，例如 ["暴雨", "台风"]。
+weather_alert_types = []
+weather_alert_retention_days = 180
+weather_alert_timeout_seconds = 12
+weather_alert_retry_max = 3
+weather_alert_failure_threshold = 3
+weather_alert_failure_pause_minutes = 60
+
+# 和风天气备用源（可选）：新版 JWT 用 qweather_token + qweather_api_host，
+# 旧版 API Key 使用 qweather_api_key；地区编码与经纬度可显式配置以避免每次地理查询。
+qweather_api_key = ""
+qweather_token = ""
+qweather_api_host = "https://api.qweather.com"
+qweather_location_id = ""
+# qweather_latitude = 31.23
+# qweather_longitude = 121.47

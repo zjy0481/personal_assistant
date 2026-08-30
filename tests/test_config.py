@@ -7,6 +7,7 @@ from assistant.config import (
     DEFAULT_LOCATION,
     DEFAULT_PUSH_CHANNELS,
     DEFAULT_SOURCE_WHITELIST,
+    DEFAULT_WEATHER_ALERT_TYPES,
     DEFAULT_TIMEZONE,
     ConfigurationError,
     Settings,
@@ -185,3 +186,31 @@ def test_settings_is_a_public_value_object() -> None:
     assert settings.source_whitelist == ["people"]
     assert settings.push_channels == ["wechat_work"]
     assert settings.auth_token == "local-secret"
+
+def test_settings_carries_weather_alert_configuration() -> None:
+    settings = Settings(
+        location="北京",
+        timezone="Asia/Shanghai",
+        weather_alert_enabled=True,
+        weather_alert_locations=["北京"],
+        weather_alert_interval_seconds=300,
+        weather_alert_types=["暴雨", "台风"],
+        weather_alert_retention_days=90,
+        weather_alert_retry_max=2,
+        qweather_api_key="q-key",
+        qweather_token="q-token",
+        qweather_latitude=39.9,
+        qweather_longitude=116.4,
+    )
+
+    assert settings.alert_locations == ["北京"]
+    assert settings.active_weather_alert_types == ["暴雨", "台风"]
+    assert settings.qweather_api_key == "q-key"
+    assert settings.qweather_token == "q-token"
+
+
+def test_weather_alert_locations_fall_back_to_location() -> None:
+    settings = Settings(location="杭州", timezone="Asia/Shanghai")
+
+    assert settings.alert_locations == ["杭州"]
+    assert settings.active_weather_alert_types == DEFAULT_WEATHER_ALERT_TYPES
