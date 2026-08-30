@@ -1,0 +1,18 @@
+[Unit]
+Description=Personal Assistant Web
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=personal-assistant
+Group=personal-assistant
+WorkingDirectory=/opt/personal-assistant/app
+Environment=HOME=/opt/personal-assistant
+EnvironmentFile=-/opt/personal-assistant/app/.env
+ExecStart=/opt/personal-assistant/app/.venv/bin/python -m uvicorn assistant.main:app --host 127.0.0.1 --port 8000 --proxy-headers --forwarded-allow-ips 127.0.0.1
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

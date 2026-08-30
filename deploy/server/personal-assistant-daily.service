@@ -1,0 +1,16 @@
+[Unit]
+Description=Personal Assistant Daily Report
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=personal-assistant
+Group=personal-assistant
+WorkingDirectory=/opt/personal-assistant/app
+Environment=HOME=/opt/personal-assistant
+EnvironmentFile=-/opt/personal-assistant/app/.env
+ExecStart=/opt/personal-assistant/app/.venv/bin/python -m assistant daily
+
+[Install]
+WantedBy=multi-user.target
