@@ -1,8 +1,7 @@
 name: Daily Report
 
 on:
-  schedule:
-    - cron: "0 0 * * *"
+  # 日报已由云服务器 systemd timer 每天 08:00 执行；此工作流仅保留手动触发。
   workflow_dispatch:
 
 jobs:

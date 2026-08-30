@@ -19,6 +19,22 @@ interface Message {
 
 const SESSION_KEY = 'assistant_session_id'
 
+function createSessionId(): string {
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+    return crypto.randomUUID()
+  }
+  const bytes = new Uint8Array(16)
+  if (typeof crypto !== 'undefined' && typeof crypto.getRandomValues === 'function') {
+    crypto.getRandomValues(bytes)
+  } else {
+    for (let index = 0; index < bytes.length; index += 1) {
+      bytes[index] = Math.floor(Math.random() * 256)
+    }
+  }
+  return Array.from(bytes, (value) => value.toString(16).padStart(2, '0')).join('')
+}
+
+
 export function ChatPanel({
   report,
   open,
@@ -33,7 +49,7 @@ export function ChatPanel({
   const [sessionId] = useState(() => {
     const stored = localStorage.getItem(SESSION_KEY)
     if (stored) return stored
-    const next = crypto.randomUUID()
+    const next = createSessionId()
     localStorage.setItem(SESSION_KEY, next)
     return next
   })
