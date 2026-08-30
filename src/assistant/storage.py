@@ -3,6 +3,7 @@
 import json
 import sqlite3
 from dataclasses import dataclass
+from typing import Any
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
@@ -264,6 +265,108 @@ class SnapshotStore:
             return int(cursor.rowcount)
         finally:
             conn.close()
+    def save_wecom_ai_message(
+        self,
+        *,
+        msgid: str,
+        req_id: str = "",
+        chat_id: str = "",
+        chat_type: str = "",
+        from_userid: str = "",
+        msg_type: str = "",
+        content: str = "",
+        status: str = "processing",
+    ) -> int | None:
+        """Insert a unique smart-robot callback; return None for duplicates."""
+        now = datetime.now(timezone.utc).isoformat()
+        conn = self._connect()
+        try:
+            cursor = conn.execute(
+                """
+                INSERT OR IGNORE INTO wecom_ai_messages (
+                    user_id, msgid, req_id, chat_id, chat_type,
+                    from_userid, msg_type, content, status,
+                    created_at, updated_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    "default", msgid, req_id, chat_id, chat_type,
+                    from_userid, msg_type, content, status, now, now,
+                ),
+            )
+            conn.commit()
+            return int(cursor.lastrowid) if cursor.rowcount else None
+        finally:
+            conn.close()
+
+    def mark_wecom_ai_message(
+        self,
+        msgid: str,
+        status: str,
+        *,
+        answer: str = "",
+        error: str = "",
+    ) -> None:
+        now = datetime.now(timezone.utc).isoformat()
+        conn = self._connect()
+        try:
+            conn.execute(
+                """
+                UPDATE wecom_ai_messages
+                SET status = ?, answer = ?, error = ?, updated_at = ?
+                WHERE msgid = ?
+                """,
+                (status, answer, error, now, msgid),
+            )
+            conn.commit()
+        finally:
+            conn.close()
+
+    def load_wecom_ai_message(self, msgid: str) -> dict[str, Any] | None:
+        conn = self._connect()
+        try:
+            row = conn.execute(
+                """
+                SELECT msgid, req_id, chat_id, chat_type, from_userid,
+                       msg_type, content, status, answer, error,
+                       created_at, updated_at
+                FROM wecom_ai_messages
+                WHERE msgid = ?
+                """,
+                (msgid,),
+            ).fetchone()
+        finally:
+            conn.close()
+        if row is None:
+            return None
+        return {
+            "msgid": row[0],
+            "req_id": row[1],
+            "chat_id": row[2],
+            "chat_type": row[3],
+            "from_userid": row[4],
+            "msg_type": row[5],
+            "content": row[6],
+            "status": row[7],
+            "answer": row[8],
+            "error": row[9],
+            "created_at": row[10],
+            "updated_at": row[11],
+        }
+
+    def delete_expired_wecom_ai_messages(self, days: int = 180) -> int:
+        cutoff = (datetime.now(timezone.utc) - timedelta(days=days)).isoformat()
+        conn = self._connect()
+        try:
+            cursor = conn.execute(
+                "DELETE FROM wecom_ai_messages WHERE created_at < ?",
+                (cutoff,),
+            )
+            conn.commit()
+            return int(cursor.rowcount)
+        finally:
+            conn.close()
+
     def save_weather_alert(
         self,
         alert: WeatherAlert,
@@ -871,6 +974,32 @@ class SnapshotStore:
                 metadata TEXT NOT NULL DEFAULT '{}',
                 created_at TEXT NOT NULL
             )
+            """
+        )
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS wecom_ai_messages (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id TEXT NOT NULL DEFAULT 'default',
+                msgid TEXT NOT NULL UNIQUE,
+                req_id TEXT NOT NULL DEFAULT '',
+                chat_id TEXT NOT NULL DEFAULT '',
+                chat_type TEXT NOT NULL DEFAULT '',
+                from_userid TEXT NOT NULL DEFAULT '',
+                msg_type TEXT NOT NULL DEFAULT '',
+                content TEXT NOT NULL DEFAULT '',
+                status TEXT NOT NULL DEFAULT 'processing',
+                answer TEXT NOT NULL DEFAULT '',
+                error TEXT NOT NULL DEFAULT '',
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL
+            )
+            """
+        )
+        conn.execute(
+            """
+            CREATE INDEX IF NOT EXISTS idx_wecom_ai_messages_created_at
+            ON wecom_ai_messages(created_at)
             """
         )
         conn.execute(

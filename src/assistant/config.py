@@ -88,6 +88,21 @@ class Settings(BaseSettings):
     wecom_userid: str = ""
     web_url: str = "http://127.0.0.1:8000/"
     wecom_mock: bool = False
+    wecom_ai_enabled: bool = False
+    wecom_ai_mode: str = "long_connection"
+    wecom_ai_bot_id: str = ""
+    wecom_ai_bot_secret: str = ""
+    wecom_ai_bot_name: str = ""
+    wecom_ai_allowed_chat_ids: list[str] = Field(default_factory=list)
+    wecom_ai_allowed_user_ids: list[str] = Field(default_factory=list)
+    wecom_ai_ws_url: str = "wss://openws.work.weixin.qq.com"
+    wecom_ai_callback_url: str = ""
+    wecom_ai_token: str = ""
+    wecom_ai_encoding_aes_key: str = ""
+    wecom_ai_heartbeat_seconds: int = Field(default=30, ge=5, le=120)
+    wecom_ai_reconnect_initial_seconds: int = Field(default=1, ge=1, le=60)
+    wecom_ai_reconnect_max_seconds: int = Field(default=60, ge=5, le=600)
+    wecom_ai_retention_days: int = Field(default=180, ge=1, le=3650)
     llm_provider: str = "deepseek"
     llm_api_key: str = ""
     llm_base_url: str = "https://api.deepseek.com"
@@ -145,6 +160,8 @@ class Settings(BaseSettings):
         "push_channels",
         "weather_alert_locations",
         "weather_alert_types",
+        "wecom_ai_allowed_chat_ids",
+        "wecom_ai_allowed_user_ids",
         mode="before",
     )
     @classmethod
@@ -170,6 +187,19 @@ class Settings(BaseSettings):
         raise ValueError("列表配置必须是数组或逗号分隔的字符串")
 
     @model_validator(mode="after")
+    def validate_wecom_ai(self) -> "Settings":
+        if not self.wecom_ai_active:
+            return self
+        if self.wecom_ai_mode not in ("long_connection", "callback"):
+            raise ValueError("wecom_ai_mode 仅支持 long_connection 或 callback")
+        if self.wecom_ai_mode == "long_connection":
+            if not self.wecom_ai_bot_id.strip() or not self.wecom_ai_bot_secret.strip():
+                raise ValueError("长连接模式必须配置 wecom_ai_bot_id 和 wecom_ai_bot_secret")
+        else:
+            if not self.wecom_ai_callback_url.strip() or not self.wecom_ai_token.strip() or not self.wecom_ai_encoding_aes_key.strip():
+                raise ValueError("回调模式必须配置 callback_url、token、encoding_aes_key")
+        return self
+    @model_validator(mode="after")
     def validate_web_auth(self) -> "Settings":
         if self.web_require_auth and not self.auth_token.strip():
             raise ValueError(
@@ -183,6 +213,12 @@ class Settings(BaseSettings):
                 "qweather_latitude 和 qweather_longitude 必须同时配置"
             )
         return self
+
+    @property
+    def wecom_ai_active(self) -> bool:
+        return self.wecom_ai_enabled or bool(
+            self.wecom_ai_bot_id.strip() and self.wecom_ai_bot_secret.strip()
+        )
 
     @property
     def alert_locations(self) -> list[str]:

@@ -16,8 +16,8 @@ def main() -> int:
         "command",
         nargs="?",
         default="web",
-        choices=["web", "daily", "alerts"],
-        help="启动网页服务、生成并推送日报或监测极端天气预警",
+        choices=["web", "daily", "alerts", "wecom", "bot"],
+        help="启动网页服务、日报、预警监测或企业微信智能机器人",
     )
     parser.add_argument(
         "--force",
@@ -65,7 +65,11 @@ def main() -> int:
         print(result.message or "完成")
         return 0 if result.status in ("ok", "paused", "disabled", "stopped") else 1
 
-    import uvicorn
+    if args.command in ("wecom", "bot"):
+        from assistant.wecom_ai_service import run_wecom_bot
+
+        return run_wecom_bot()
+
     from assistant.main import app
 
     uvicorn.run(app, host="127.0.0.1", port=8000)

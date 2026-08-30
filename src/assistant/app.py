@@ -35,6 +35,9 @@ def create_app(
             store.delete_expired_weather_alerts(
                 settings.weather_alert_retention_days
             )
+            store.delete_expired_wecom_ai_messages(
+                settings.wecom_ai_retention_days
+            )
         yield
 
     app = FastAPI(title="Personal Assistant", lifespan=lifespan)

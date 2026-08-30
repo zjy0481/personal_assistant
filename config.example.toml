@@ -80,3 +80,21 @@ qweather_api_host = "https://api.qweather.com"
 qweather_location_id = ""
 # qweather_latitude = 31.23
 # qweather_longitude = 121.47
+
+# V2 Phase 2：企业微信智能机器人（群聊 @ 提问与 LLM 回复）。
+wecom_ai_enabled = false
+wecom_ai_mode = "long_connection"
+wecom_ai_bot_id = ""
+wecom_ai_bot_secret = ""
+wecom_ai_bot_name = "雪球日报助手"
+wecom_ai_allowed_chat_ids = []
+wecom_ai_allowed_user_ids = []
+wecom_ai_ws_url = "wss://openws.work.weixin.qq.com"
+wecom_ai_heartbeat_seconds = 30
+wecom_ai_reconnect_initial_seconds = 1
+wecom_ai_reconnect_max_seconds = 60
+wecom_ai_retention_days = 180
+# 回调模式专用（当前使用长连接，无需填写）。
+# wecom_ai_callback_url = ""
+# wecom_ai_token = ""
+# wecom_ai_encoding_aes_key = ""

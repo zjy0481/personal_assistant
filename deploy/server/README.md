@@ -10,6 +10,7 @@
 - 网页：Nginx `80` → FastAPI/Uvicorn `127.0.0.1:8000`
 - 日报：`personal-assistant-daily.timer`，每天 08:00（Asia/Shanghai）
 - 预警：`personal-assistant-alerts.service`，常驻轮询
+- 企业微信智能机器人：`personal-assistant-wecom.service`，长连接常驻
 - 防火墙：UFW 放通 `22`、`80`、`443`
 
 ## 常用命令
@@ -18,6 +19,7 @@
 sudo systemctl status personal-assistant-web.service
 sudo journalctl -u personal-assistant-web.service -f
 sudo systemctl status personal-assistant-alerts.service
+sudo systemctl status personal-assistant-wecom.service
 sudo systemctl list-timers personal-assistant-daily.timer
 sudo nginx -t && sudo systemctl reload nginx
 ```
