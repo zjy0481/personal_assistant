@@ -115,3 +115,51 @@ export interface WeatherAlertRun {
   message: string
   created_at: string
 }
+
+export interface Favorite {
+  item_id: string
+  report_date: string
+  block_kind: BlockKind | string
+  title: string
+  url: string
+  source: string
+  note: string
+  status: 'active' | 'removed'
+  created_at: string
+  updated_at: string
+  user_id?: string
+}
+
+export interface FavoritePayload {
+  item_id: string
+  report_date: string
+  block_kind: string
+  title: string
+  url: string
+  source: string
+  note?: string
+}
+
+export interface NewsTerm {
+  report_date: string
+  word: string
+  count: number
+  rank: number
+}
+
+export interface GitHubRepo {
+  report_date: string
+  repo: string
+  stars: number
+  new_stars: number | null
+  rank: number
+  appearances: number
+}
+
+export interface TrendPayload {
+  days: number
+  dates: string[]
+  news: NewsTerm[]
+  github: GitHubRepo[]
+  message?: string
+}

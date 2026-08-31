@@ -70,6 +70,8 @@ def main() -> int:
 
         return run_wecom_bot()
 
+    import uvicorn
+
     from assistant.main import app
 
     uvicorn.run(app, host="127.0.0.1", port=8000)

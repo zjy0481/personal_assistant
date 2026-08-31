@@ -1,7 +1,9 @@
-import type { ContentBlock, ContentItem, Report, RunStatus, WeatherAlert, WeatherAlertEvent, WeatherAlertRun } from '../types'
+import type { ContentBlock, ContentItem, Favorite, Report, RunStatus, TrendPayload, WeatherAlert, WeatherAlertEvent, WeatherAlertRun } from '../types'
 import { EmptyState } from './EmptyState'
+import { FavoritesPanel } from './FavoritesPanel'
 import { ItemCard } from './ItemCard'
 import { StatusPill } from './StatusPill'
+import { TrendsPanel } from './TrendsPanel'
 
 type View = 'dashboard' | 'weather' | 'news' | 'github' | 'ai' | 'favorites' | 'trends'
 
@@ -12,6 +14,13 @@ interface ReportDashboardProps {
   weatherAlerts: WeatherAlert[]
   weatherEvents: WeatherAlertEvent[]
   weatherRun: WeatherAlertRun | null
+  favorites: Favorite[]
+  trends: TrendPayload | null
+  trendLoading: boolean
+  trendError: string
+  trendDays: number
+  onTrendDaysChange: (days: number) => void
+  onToggleFavorite: (item: ContentItem | Favorite, blockKind: string) => void
   onAsk: (item: ContentItem) => void
 }
 
@@ -22,15 +31,34 @@ export function ReportDashboard({
   weatherAlerts,
   weatherEvents,
   weatherRun,
+  favorites,
+  trends,
+  trendLoading,
+  trendError,
+  trendDays,
+  onTrendDaysChange,
+  onToggleFavorite,
   onAsk,
 }: ReportDashboardProps) {
   const visibleBlocks = filterBlocks(report.blocks, view)
 
-  if (view === 'favorites' || view === 'trends') {
+  if (view === 'favorites') {
     return (
-      <EmptyState
-        title={view === 'favorites' ? '收藏功能将在第三阶段提供' : '趋势可视化将在第三阶段提供'}
-        description="Phase 1 已完成日报展示、摘要与问答，收藏和图表可作为后续开发入口。"
+      <FavoritesPanel
+        favorites={favorites}
+        onRemove={(item) => onToggleFavorite(item, item.block_kind)}
+      />
+    )
+  }
+
+  if (view === 'trends') {
+    return (
+      <TrendsPanel
+        data={trends}
+        loading={trendLoading}
+        error={trendError}
+        days={trendDays}
+        onDaysChange={onTrendDaysChange}
       />
     )
   }
@@ -73,7 +101,7 @@ export function ReportDashboard({
       ) : (
         <div className="space-y-8">
           {visibleBlocks.map((block) => (
-            <BlockSection key={block.kind} block={block} onAsk={onAsk} />
+            <BlockSection key={block.kind} block={block} favorites={favorites} onToggleFavorite={onToggleFavorite} onAsk={onAsk} />
           ))}
         </div>
       )}
@@ -195,9 +223,13 @@ function WeatherAlertPanel({
 
 function BlockSection({
   block,
+  favorites,
+  onToggleFavorite,
   onAsk,
 }: {
   block: ContentBlock
+  favorites: Favorite[]
+  onToggleFavorite: (item: ContentItem | Favorite, blockKind: string) => void
   onAsk: (item: ContentItem) => void
 }) {
   return (
@@ -222,7 +254,14 @@ function BlockSection({
         <div className="divide-y divide-slate-100">
           {block.items.length > 0 ? (
             block.items.map((item) => (
-              <ItemCard key={item.item_id || item.url || item.title} item={item} onAsk={onAsk} />
+              <ItemCard
+                key={item.item_id || item.url || item.title}
+                item={item}
+                blockKind={block.kind}
+                isFavorite={favorites.some((favorite) => favorite.item_id === item.item_id)}
+                onFavorite={(target) => onToggleFavorite(target, block.kind)}
+                onAsk={onAsk}
+              />
             ))
           ) : (
             <p className="py-4 text-sm text-slate-500">暂无条目</p>

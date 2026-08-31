@@ -2,6 +2,14 @@
 
 import json
 import sqlite3
+
+import re
+from collections import Counter
+
+try:
+    import jieba
+except ImportError:
+    jieba = None
 from dataclasses import dataclass
 from typing import Any
 from datetime import datetime, timedelta, timezone
@@ -9,6 +17,9 @@ from pathlib import Path
 
 from assistant.models import (
     ContentItem,
+    Favorite,
+    GitHubRepo,
+    NewsTerm,
     Report,
     WeatherAlert,
     WeatherAlertEvent,
@@ -16,6 +27,111 @@ from assistant.models import (
     report_from_dict,
     report_to_dict,
 )
+
+
+
+_STOP_WORDS = {
+    "\u7684", "\u4e86", "\u5728", "\u662f", "\u6709", "\u548c", "\u4e0e", "\u53ca", "\u6216", "\u800c", "\u5bf9", "\u4e3a", "\u4ee5", "\u4ece", "\u5230", "\u5c06", "\u7b49", "\u4e2d", "\u8fd9", "\u90a3", "\u4e00", "\u4e0d", "\u4e5f", "\u90fd", "\u5e76", "\u4f46", "\u88ab", "\u4e8e", "\u5176", "\u4e4b", "\u53c8", "\u5c31", "\u5f88", "\u66f4", "\u6700", "\u8fd8", "\u53ef", "\u80fd", "\u4f1a", "\u8981", "\u8ba9", "\u628a", "\u5df2", "\u6ca1", "\u5982",
+    "the", "a", "an", "and", "of", "to", "in", "on", "for", "with", "is", "are", "was", "were",
+    "be", "been", "being", "have", "has", "had", "do", "does", "did", "will", "would", "shall",
+    "should", "can", "could", "may", "might", "must", "not", "no", "so", "if", "but", "than",
+    "then", "very", "at", "by", "from", "as", "or", "this", "that", "these", "those", "it",
+    "its", "he", "him", "his", "her", "hers", "she", "they", "them", "their", "theirs", "we",
+    "us", "our", "ours", "you", "your", "yours", "i", "me", "my", "mine", "who", "whom",
+    "whose", "which", "what", "when", "where", "why", "how", "about", "above", "across",
+    "after", "against", "along", "among", "around", "before", "behind", "below", "beneath",
+    "beside", "between", "beyond", "despite", "down", "during", "except", "inside", "into",
+    "near", "onto", "outside", "over", "through", "toward", "under", "until", "upon", "via",
+    "while", "within", "without", "only", "more", "most", "some", "any", "all", "each", "both",
+    "few", "many", "much", "other", "another", "such", "also", "still", "just", "now", "then",
+    "first", "last", "next", "today", "yesterday", "tomorrow", "new", "latest", "old", "good",
+    "great", "big", "small", "high", "low", "top", "best", "time", "times", "year", "years",
+    "day", "days", "week", "weeks", "month", "months", "make", "makes", "made", "get", "gets",
+    "got", "take", "takes", "took", "use", "uses", "used", "report", "reports", "reported",
+    "news", "said", "says", "say", "told", "tells", "added", "adds", "according", "update",
+    "updates", "updated", "release", "releases", "released", "launch", "launches", "launched",
+    "show", "shows", "showed", "come", "comes", "came", "go", "goes", "went",
+}
+
+_NOUN_POS = {"n", "nr", "ns", "nt", "nz", "ng", "nrt", "vn"}
+
+_TOKEN_RE = re.compile(r"[\u4e00-\u9fff]{2,}|[A-Za-z0-9][A-Za-z0-9\-_.]{1,}")
+
+
+def _tokenize_news_text(text: str) -> list[str]:
+    """Extract topical Chinese nouns and meaningful English terms."""
+    if not text:
+        return []
+    value = re.sub(r"[\r\n]+", " ", text)
+    if jieba is not None:
+        try:
+            import jieba.posseg as posseg
+            segments = list(posseg.cut(value))
+        except Exception:
+            segments = [(item, "") for item in jieba.cut(value)]
+    else:
+        segments = [(item, "") for item in _TOKEN_RE.findall(value)]
+
+    words: list[str] = []
+    for raw, flag in segments:
+        word = re.sub(r"^[^\w\u4e00-\u9fff]+|[^\w\u4e00-\u9fff]+$", "", str(raw))
+        key = word.strip().lower()
+        if not key or key in _STOP_WORDS:
+            continue
+        if flag == "eng":
+            if len(key) < 3 and not word.isupper():
+                continue
+            if not re.match(r"^[a-z0-9][a-z0-9\-_.]*$", key):
+                continue
+            words.append(key)
+        elif flag and flag in _NOUN_POS:
+            if len(key) >= 2:
+                words.append(key)
+        elif not flag:
+            if re.search(r"[\u4e00-\u9fff]", word):
+                if len(key) >= 2:
+                    words.append(key)
+            elif len(key) >= 3 and re.match(r"^[a-z0-9][a-z0-9\-_.]*$", key):
+                words.append(key)
+    return words
+
+
+def _normalize_repo(title: str, url: str, metadata: dict) -> str:
+    candidates = [url, title]
+    if metadata:
+        candidates.append(str(metadata.get("repo") or ""))
+    for value in candidates:
+        match = re.search(r"github\.com[/:]([^/]+)/([^/?#]+)", value)
+        if match:
+            return f"{match.group(1)}/{match.group(2)}"
+    return (title or url).strip()
+
+
+def _date_range(start_date: str, end_date: str) -> list[str]:
+    from datetime import date as date_type
+    current = date_type.fromisoformat(start_date)
+    end = date_type.fromisoformat(end_date)
+    result: list[str] = []
+    while current <= end:
+        result.append(current.isoformat())
+        current += timedelta(days=1)
+    return result
+
+
+def _favorite_from_row(row: tuple) -> Favorite:
+    return Favorite(
+        item_id=row[0],
+        report_date=row[1],
+        block_kind=row[2],
+        title=row[3],
+        url=row[4],
+        source=row[5],
+        note=row[6],
+        status=row[7],
+        created_at=row[8],
+        updated_at=row[9],
+        user_id=row[10],
+    )
 
 
 class SnapshotAlreadyExistsError(RuntimeError):
@@ -196,6 +312,391 @@ class SnapshotStore:
         finally:
             conn.close()
         return [self._item_from_row(row) for row in rows]
+
+    def save_favorite(
+        self,
+        *,
+        item_id: str,
+        report_date: str = "",
+        block_kind: str = "",
+        title: str = "",
+        url: str = "",
+        source: str = "",
+        note: str = "",
+        status: str = "active",
+    ) -> int:
+        """Save or restore one favorite row idempotently."""
+        now = datetime.now(timezone.utc).isoformat()
+        conn = self._connect()
+        try:
+            conn.execute(
+                """
+                INSERT INTO favorites (
+                    user_id, item_id, report_date, block_kind, title, url,
+                    source, note, status, created_at, updated_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(user_id, item_id) DO UPDATE SET
+                    report_date = excluded.report_date,
+                    block_kind = excluded.block_kind,
+                    title = excluded.title,
+                    url = excluded.url,
+                    source = excluded.source,
+                    note = excluded.note,
+                    status = 'active',
+                    updated_at = excluded.updated_at
+                """,
+                (
+                    "default", item_id, report_date, block_kind, title, url,
+                    source, note, status, now, now,
+                ),
+            )
+            row = conn.execute(
+                """
+                SELECT id FROM favorites
+                WHERE user_id = ? AND item_id = ? AND status = 'active'
+                """,
+                ("default", item_id),
+            ).fetchone()
+            conn.commit()
+            return int(row[0]) if row else 0
+        finally:
+            conn.close()
+
+    def remove_favorite(self, item_id: str) -> None:
+        """Mark one favorite row removed; history is kept for re-favoriting."""
+        now = datetime.now(timezone.utc).isoformat()
+        conn = self._connect()
+        try:
+            conn.execute(
+                """
+                UPDATE favorites
+                SET status = 'removed', updated_at = ?
+                WHERE user_id = ? AND item_id = ?
+                """,
+                (now, "default", item_id),
+            )
+            conn.commit()
+        finally:
+            conn.close()
+
+    def list_favorites(
+        self,
+        *,
+        block_kind: str | None = None,
+        status: str = "active",
+        limit: int = 500,
+    ) -> list[Favorite]:
+        conn = self._connect()
+        try:
+            conditions = ["user_id = ?", "status = ?"]
+            params: list[object] = ["default", status]
+            if block_kind:
+                conditions.append("block_kind = ?")
+                params.append(block_kind)
+            rows = conn.execute(
+                f"""
+                SELECT item_id, report_date, block_kind, title, url,
+                       source, note, status, created_at, updated_at, user_id
+                FROM favorites
+                WHERE {" AND ".join(conditions)}
+                ORDER BY updated_at DESC
+                LIMIT ?
+                """,
+                (*params, limit),
+            ).fetchall()
+        finally:
+            conn.close()
+        return [_favorite_from_row(row) for row in rows]
+
+    def load_favorite(self, item_id: str) -> Favorite | None:
+        conn = self._connect()
+        try:
+            row = conn.execute(
+                """
+                SELECT item_id, report_date, block_kind, title, url,
+                       source, note, status, created_at, updated_at, user_id
+                FROM favorites
+                WHERE user_id = ? AND item_id = ?
+                """,
+                ("default", item_id),
+            ).fetchone()
+        finally:
+            conn.close()
+        return _favorite_from_row(row) if row else None
+
+    def latest_report_date(self) -> str | None:
+        conn = self._connect()
+        try:
+            row = conn.execute(
+                "SELECT MAX(substr(generated_at, 1, 10)) FROM report_snapshots"
+            ).fetchone()
+        finally:
+            conn.close()
+        return row[0] if row and row[0] else None
+
+    def ensure_content_items_for_range(
+        self,
+        start_date: str,
+        end_date: str,
+    ) -> int:
+        """Backfill normalized content items from historical report snapshots."""
+        conn = self._connect()
+        try:
+            rows = conn.execute(
+                """
+                SELECT generated_at, payload
+                FROM report_snapshots
+                WHERE substr(generated_at, 1, 10) BETWEEN ? AND ?
+                ORDER BY generated_at
+                """,
+                (start_date, end_date),
+            ).fetchall()
+            count = 0
+            for generated_at, payload in rows:
+                report_date = generated_at[:10]
+                try:
+                    report = report_from_dict(json.loads(payload))
+                except (ValueError, KeyError, TypeError):
+                    continue
+                self._sync_content_items(conn, report, report_date)
+                count += 1
+            conn.commit()
+            return count
+        finally:
+            conn.close()
+
+    def recompute_trends(self, start_date: str, end_date: str, *, min_count: int = 1) -> int:
+        """Aggregate news keywords and GitHub metrics for a date range."""
+        self.ensure_content_items_for_range(start_date, end_date)
+        dates = _date_range(start_date, end_date)
+        if not dates:
+            return 0
+        conn = self._connect()
+        try:
+            for report_date in dates:
+                self._write_news_trends(conn, report_date, min_count)
+                self._write_github_trends(conn, report_date)
+                count = sum(
+                    row[0]
+                    for row in conn.execute(
+                        """
+                        SELECT COUNT(*)
+                        FROM news_trend_snapshots
+                        WHERE user_id = ? AND report_date = ?
+                        """,
+                        ("default", report_date),
+                    ).fetchall()
+                )
+                status = "ok" if count else "no_data"
+                self._mark_trend_run(conn, report_date, status)
+            conn.commit()
+            return len(dates)
+        finally:
+            conn.close()
+
+    def load_news_trends(
+        self,
+        start_date: str,
+        end_date: str,
+    ) -> list[NewsTerm]:
+        conn = self._connect()
+        try:
+            rows = conn.execute(
+                """
+                SELECT report_date, word, count, rank
+                FROM news_trend_snapshots
+                WHERE user_id = ? AND report_date BETWEEN ? AND ?
+                ORDER BY report_date, rank
+                """,
+                ("default", start_date, end_date),
+            ).fetchall()
+        finally:
+            conn.close()
+        return [NewsTerm(*row) for row in rows]
+
+    def load_github_trends(
+        self,
+        start_date: str,
+        end_date: str,
+    ) -> list[GitHubRepo]:
+        conn = self._connect()
+        try:
+            rows = conn.execute(
+                """
+                SELECT report_date, repo, stars, new_stars, rank, appearances
+                FROM github_trend_snapshots
+                WHERE user_id = ? AND report_date BETWEEN ? AND ?
+                ORDER BY report_date, rank
+                """,
+                ("default", start_date, end_date),
+            ).fetchall()
+        finally:
+            conn.close()
+        return [GitHubRepo(*row) for row in rows]
+
+    def delete_expired_trend_snapshots(self, days: int = 180) -> int:
+        cutoff = (datetime.now(timezone.utc) - timedelta(days=days)).date().isoformat()
+        conn = self._connect()
+        try:
+            news = conn.execute(
+                "DELETE FROM news_trend_snapshots WHERE report_date < ?",
+                (cutoff,),
+            )
+            github = conn.execute(
+                "DELETE FROM github_trend_snapshots WHERE report_date < ?",
+                (cutoff,),
+            )
+            runs = conn.execute(
+                "DELETE FROM trend_runs WHERE report_date < ?",
+                (cutoff,),
+            )
+            conn.commit()
+            return int(news.rowcount + github.rowcount + runs.rowcount)
+        finally:
+            conn.close()
+
+    def _write_news_trends(
+        self,
+        conn: sqlite3.Connection,
+        report_date: str,
+        min_count: int = 1,
+    ) -> None:
+        counter: Counter = Counter()
+        row = conn.execute(
+            """
+            SELECT payload
+            FROM report_snapshots
+            WHERE substr(generated_at, 1, 10) = ?
+            """,
+            (report_date,),
+        ).fetchone()
+        if row:
+            try:
+                report = report_from_dict(json.loads(row[0]))
+            except (ValueError, KeyError, TypeError):
+                report = None
+            if report:
+                for block in report.blocks:
+                    if block.kind != "news":
+                        continue
+                    for item in block.items:
+                        text = item.title or item.summary or item.llm_summary
+                        for word in _tokenize_news_text(text):
+                            counter[word] += 1
+        conn.execute(
+            "DELETE FROM news_trend_snapshots WHERE user_id = ? AND report_date = ?",
+            ("default", report_date),
+        )
+        for rank, (word, count) in enumerate(
+            sorted((item for item in counter.items() if item[1] >= min_count), key=lambda item: (-item[1], item[0]))[:10],
+            start=1,
+        ):
+            conn.execute(
+                """
+                INSERT INTO news_trend_snapshots (
+                    user_id, report_date, word, count, rank, created_at
+                ) VALUES (?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    "default", report_date, word, count, rank,
+                    datetime.now(timezone.utc).isoformat(),
+                ),
+            )
+
+    def _write_github_trends(
+        self,
+        conn: sqlite3.Connection,
+        report_date: str,
+    ) -> None:
+        repo_data: dict[str, int] = {}
+        row = conn.execute(
+            """
+            SELECT payload
+            FROM report_snapshots
+            WHERE substr(generated_at, 1, 10) = ?
+            """,
+            (report_date,),
+        ).fetchone()
+        if row:
+            try:
+                report = report_from_dict(json.loads(row[0]))
+            except (ValueError, KeyError, TypeError):
+                report = None
+            if report:
+                for block in report.blocks:
+                    if block.kind != "github":
+                        continue
+                    for item in block.items:
+                        repo = _normalize_repo(item.title, item.url, item.metadata)
+                        value = int(item.stars or 0)
+                        if repo not in repo_data or value > repo_data[repo]:
+                            repo_data[repo] = value
+        conn.execute(
+            "DELETE FROM github_trend_snapshots WHERE user_id = ? AND report_date = ?",
+            ("default", report_date),
+        )
+        ordered = sorted(repo_data.items(), key=lambda item: (-item[1], item[0]))
+        for rank, (repo, stars) in enumerate(ordered, start=1):
+            previous = conn.execute(
+                """
+                SELECT stars FROM github_trend_snapshots
+                WHERE user_id = ? AND repo = ? AND report_date < ?
+                ORDER BY report_date DESC
+                LIMIT 1
+                """,
+                ("default", repo, report_date),
+            ).fetchone()
+            previous_stars = int(previous[0]) if previous else None
+            new_stars = stars - previous_stars if previous_stars is not None else None
+            conn.execute(
+                """
+                INSERT INTO github_trend_snapshots (
+                    user_id, report_date, repo, stars, new_stars, rank,
+                    appearances, created_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    "default", report_date, repo, stars, new_stars, rank, 0,
+                    datetime.now(timezone.utc).isoformat(),
+                ),
+            )
+        for repo in repo_data:
+            count = conn.execute(
+                """
+                SELECT COUNT(DISTINCT report_date)
+                FROM github_trend_snapshots
+                WHERE user_id = ? AND repo = ?
+                """,
+                ("default", repo),
+            ).fetchone()
+            appearances = int(count[0]) if count else 0
+            conn.execute(
+                """
+                UPDATE github_trend_snapshots
+                SET appearances = ?
+                WHERE user_id = ? AND repo = ?
+                """,
+                (appearances, "default", repo),
+            )
+    def _mark_trend_run(
+        self,
+        conn: sqlite3.Connection,
+        report_date: str,
+        status: str,
+    ) -> None:
+        now = datetime.now(timezone.utc).isoformat()
+        conn.execute(
+            """
+            INSERT INTO trend_runs (
+                user_id, report_date, status, message, created_at
+            ) VALUES (?, ?, ?, '', ?)
+            ON CONFLICT(user_id, report_date) DO UPDATE SET
+                status = excluded.status,
+                message = excluded.message,
+                created_at = excluded.created_at
+            """,
+            ("default", report_date, status, now),
+        )
 
     def save_chat_message(
         self,
@@ -1110,6 +1611,86 @@ class SnapshotStore:
             """
             CREATE INDEX IF NOT EXISTS idx_weather_alert_runs_checked_at
             ON weather_alert_runs(checked_at)
+            """
+        )
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS favorites (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id TEXT NOT NULL DEFAULT 'default',
+                item_id TEXT NOT NULL,
+                report_date TEXT NOT NULL DEFAULT '',
+                block_kind TEXT NOT NULL DEFAULT '',
+                title TEXT NOT NULL DEFAULT '',
+                url TEXT NOT NULL DEFAULT '',
+                source TEXT NOT NULL DEFAULT '',
+                note TEXT NOT NULL DEFAULT '',
+                status TEXT NOT NULL DEFAULT 'active',
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL,
+                UNIQUE(user_id, item_id)
+            )
+            """
+        )
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS news_trend_snapshots (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id TEXT NOT NULL DEFAULT 'default',
+                report_date TEXT NOT NULL,
+                word TEXT NOT NULL,
+                count INTEGER NOT NULL DEFAULT 0,
+                rank INTEGER NOT NULL DEFAULT 0,
+                created_at TEXT NOT NULL,
+                UNIQUE(user_id, report_date, word)
+            )
+            """
+        )
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS github_trend_snapshots (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id TEXT NOT NULL DEFAULT 'default',
+                report_date TEXT NOT NULL,
+                repo TEXT NOT NULL,
+                stars INTEGER NOT NULL DEFAULT 0,
+                new_stars INTEGER,
+                rank INTEGER NOT NULL DEFAULT 0,
+                appearances INTEGER NOT NULL DEFAULT 0,
+                created_at TEXT NOT NULL,
+                UNIQUE(user_id, report_date, repo)
+            )
+            """
+        )
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS trend_runs (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id TEXT NOT NULL DEFAULT 'default',
+                report_date TEXT NOT NULL,
+                status TEXT NOT NULL DEFAULT '',
+                message TEXT NOT NULL DEFAULT '',
+                created_at TEXT NOT NULL,
+                UNIQUE(user_id, report_date)
+            )
+            """
+        )
+        conn.execute(
+            """
+            CREATE INDEX IF NOT EXISTS idx_favorites_user_status
+            ON favorites(user_id, status, updated_at)
+            """
+        )
+        conn.execute(
+            """
+            CREATE INDEX IF NOT EXISTS idx_news_trends_date
+            ON news_trend_snapshots(user_id, report_date)
+            """
+        )
+        conn.execute(
+            """
+            CREATE INDEX IF NOT EXISTS idx_github_trends_date
+            ON github_trend_snapshots(user_id, report_date)
             """
         )
         return conn

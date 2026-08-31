@@ -4,7 +4,7 @@ import asyncio
 import re
 import secrets
 from dataclasses import asdict
-from datetime import date
+from datetime import date, timedelta
 from typing import Any
 
 from fastapi import FastAPI, HTTPException, Query, Request
@@ -12,6 +12,9 @@ from pydantic import BaseModel, Field
 
 from assistant.llm import LLMError, LLMNotConfiguredError
 from assistant.models import (
+    favorite_to_dict,
+    github_repo_to_dict,
+    news_term_to_dict,
     report_to_dict,
     weather_alert_event_to_dict,
     weather_alert_to_dict,
@@ -21,6 +24,16 @@ from assistant.storage import SnapshotStore
 _LINK_RE = re.compile(r"\[([^\]]+)\]\((https?://[^)]+)\)")
 
 
+
+
+class FavoriteRequest(BaseModel):
+    item_id: str = Field(min_length=1, max_length=100)
+    report_date: str = Field(default="", max_length=10)
+    block_kind: str = Field(default="", max_length=20)
+    title: str = Field(default="", max_length=500)
+    url: str = Field(default="", max_length=1000)
+    source: str = Field(default="", max_length=200)
+    note: str = Field(default="", max_length=2000)
 class ChatRequest(BaseModel):
     message: str = Field(min_length=1, max_length=2000)
     session_id: str = Field(default="", max_length=100)
@@ -112,6 +125,72 @@ def register_api_routes(
             "session_id": session_id,
             "citations": citations,
         }
+
+    @app.get("/api/favorites")
+    def favorites(
+        request: Request,
+        block_kind: str | None = Query(default=None, max_length=20),
+        limit: int = Query(default=500, ge=1, le=1000),
+    ) -> dict[str, Any]:
+        active_store = _store(store)
+        items = active_store.list_favorites(block_kind=block_kind, limit=limit)
+        return {"favorites": [favorite_to_dict(item) for item in items]}
+
+    @app.post("/api/favorites")
+    def create_favorite(payload: FavoriteRequest) -> dict[str, Any]:
+        active_store = _store(store)
+        if payload.block_kind not in ("news", "ai", "github"):
+            raise HTTPException(status_code=400, detail="收藏类型仅支持新闻、AI 要事和 GitHub 项目")
+        if not payload.item_id.strip():
+            raise HTTPException(status_code=400, detail="item_id 不能为空")
+        active_store.save_favorite(
+            item_id=payload.item_id.strip(),
+            report_date=payload.report_date.strip(),
+            block_kind=payload.block_kind.strip(),
+            title=payload.title.strip(),
+            url=payload.url.strip(),
+            source=payload.source.strip(),
+            note=payload.note.strip(),
+        )
+        saved = active_store.load_favorite(payload.item_id.strip())
+        return {"favorite": favorite_to_dict(saved) if saved else None}
+
+    @app.delete("/api/favorites/{item_id}")
+    def delete_favorite(item_id: str) -> dict[str, Any]:
+        active_store = _store(store)
+        active_store.remove_favorite(item_id)
+        return {"deleted": True, "item_id": item_id}
+
+    @app.get("/api/trends")
+    def trends(
+        request: Request,
+        days: int = Query(default=7, ge=1, le=90),
+    ) -> dict[str, Any]:
+        active_store = _store(store)
+        end_date = active_store.latest_report_date()
+        if not end_date:
+            return {"days": days, "dates": [], "news": [], "github": [], "message": "暂无日报快照"}
+        end = date.fromisoformat(end_date)
+        start = end - timedelta(days=days - 1)
+        active_store.recompute_trends(
+            start.isoformat(),
+            end.isoformat(),
+            min_count=request.app.state.settings.news_trend_min_count,
+        )
+        dates = [
+            (start + timedelta(days=offset)).isoformat()
+            for offset in range(days)
+        ]
+        news = [
+            news_term_to_dict(term)
+            for term in active_store.load_news_trends(start.isoformat(), end.isoformat())
+        ]
+        github = [
+            github_repo_to_dict(repo)
+            for repo in active_store.load_github_trends(start.isoformat(), end.isoformat())
+        ]
+        return {"days": days, "dates": dates, "news": news, "github": github}
+
 
     @app.get("/api/run-status")
     def latest_run_status(request: Request) -> dict[str, Any]:

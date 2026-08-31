@@ -1,10 +1,12 @@
 import { useEffect, useState } from 'react'
-import { getLatestReport, getRunStatus, getStatus, getWeatherAlerts } from './api'
+import { addFavorite, deleteFavorite, getFavorites, getLatestReport, getRunStatus, getStatus, getTrends, getWeatherAlerts } from './api'
 import { AppShell } from './components/AppShell'
 import { ChatPanel } from './components/ChatPanel'
 import { EmptyState } from './components/EmptyState'
+import { FavoritesPanel } from './components/FavoritesPanel'
 import { ReportDashboard } from './components/ReportDashboard'
-import type { ContentItem, Report, RunStatus, WeatherAlert, WeatherAlertEvent, WeatherAlertRun } from './types'
+import { TrendsPanel } from './components/TrendsPanel'
+import type { ContentItem, Favorite, Report, RunStatus, TrendPayload, WeatherAlert, WeatherAlertEvent, WeatherAlertRun } from './types'
 
 type View = 'dashboard' | 'weather' | 'news' | 'github' | 'ai' | 'favorites' | 'trends'
 
@@ -22,6 +24,11 @@ function App() {
   const [weatherEvents, setWeatherEvents] = useState<WeatherAlertEvent[]>([])
   const [weatherRun, setWeatherRun] = useState<WeatherAlertRun | null>(null)
   const [status, setStatus] = useState<StatusInfo | null>(null)
+  const [favorites, setFavorites] = useState<Favorite[]>([])
+  const [trends, setTrends] = useState<TrendPayload | null>(null)
+  const [trendDays, setTrendDays] = useState(7)
+  const [trendLoading, setTrendLoading] = useState(false)
+  const [trendError, setTrendError] = useState('')
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [chatOpen, setChatOpen] = useState(false)
@@ -29,11 +36,12 @@ function App() {
 
   async function refresh() {
     try {
-      const [nextReport, nextStatus, nextRunStatus, nextWeather] = await Promise.all([
+      const [nextReport, nextStatus, nextRunStatus, nextWeather, nextFavorites] = await Promise.all([
         getLatestReport(),
         getStatus(),
         getRunStatus(),
         getWeatherAlerts(),
+        getFavorites(),
       ])
       setReport(nextReport)
       setStatus(nextStatus)
@@ -41,10 +49,23 @@ function App() {
       setWeatherAlerts(nextWeather.alerts)
       setWeatherEvents(nextWeather.events)
       setWeatherRun(nextWeather.run)
+      setFavorites(nextFavorites)
     } catch (err) {
       setError(err instanceof Error ? err.message : '加载失败')
     } finally {
       setLoading(false)
+    }
+  }
+
+  async function loadTrends(days: number) {
+    setTrendLoading(true)
+    setTrendError('')
+    try {
+      setTrends(await getTrends(days))
+    } catch (err) {
+      setTrendError(err instanceof Error ? err.message : '趋势加载失败')
+    } finally {
+      setTrendLoading(false)
     }
   }
 
@@ -54,14 +75,41 @@ function App() {
     void refresh()
   }, [])
 
+  function navigate(next: View) {
+    setView(next)
+    if (next === 'trends') {
+      void loadTrends(trendDays)
+    }
+    window.scrollTo({ top: 0, behavior: 'smooth' })
+  }
+
   function openQuestion(item: ContentItem) {
     setAskItem(item)
     setChatOpen(true)
   }
 
-  function navigate(next: View) {
-    setView(next)
-    window.scrollTo({ top: 0, behavior: 'smooth' })
+  async function toggleFavorite(item: ContentItem | Favorite, blockKind: string) {
+    const existing = favorites.find((favorite) => favorite.item_id === item.item_id)
+    try {
+      if (existing) {
+        await deleteFavorite(item.item_id)
+        setFavorites((current) => current.filter((favorite) => favorite.item_id !== item.item_id))
+      } else {
+        const created = await addFavorite({
+          item_id: item.item_id,
+          report_date: report?.generated_at.slice(0, 10) ?? '',
+          block_kind: blockKind,
+          title: item.title,
+          url: item.url,
+          source: item.source,
+        })
+        setFavorites((current) => current.some((favorite) => favorite.item_id === created.item_id)
+          ? current
+          : [...current, created])
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : '收藏操作失败')
+    }
   }
 
   return (
@@ -78,6 +126,19 @@ function App() {
         <LoadingState />
       ) : error ? (
         <EmptyState title="无法连接后端" description={error} />
+      ) : view === 'favorites' ? (
+        <FavoritesPanel favorites={favorites} onRemove={(item) => toggleFavorite(item, item.block_kind)} />
+      ) : view === 'trends' ? (
+        <TrendsPanel
+          data={trends}
+          loading={trendLoading}
+          error={trendError}
+          days={trendDays}
+          onDaysChange={(days) => {
+            setTrendDays(days)
+            void loadTrends(days)
+          }}
+        />
       ) : report ? (
         <ReportDashboard
           report={report}
@@ -86,6 +147,16 @@ function App() {
           weatherAlerts={weatherAlerts}
           weatherEvents={weatherEvents}
           weatherRun={weatherRun}
+          favorites={favorites}
+          trends={trends}
+          trendLoading={trendLoading}
+          trendError={trendError}
+          trendDays={trendDays}
+          onTrendDaysChange={(days) => {
+            setTrendDays(days)
+            void loadTrends(days)
+          }}
+          onToggleFavorite={toggleFavorite}
           onAsk={openQuestion}
         />
       ) : (

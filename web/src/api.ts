@@ -1,4 +1,4 @@
-import type { ChatHistoryItem, ChatResponse, Report, RunStatus, WeatherAlert, WeatherAlertEvent, WeatherAlertRun } from './types'
+import type { ChatHistoryItem, ChatResponse, Favorite, FavoritePayload, Report, RunStatus, TrendPayload, WeatherAlert, WeatherAlertEvent, WeatherAlertRun } from './types'
 
 const API_BASE = import.meta.env.VITE_API_BASE ?? ''
 const AUTH_TOKEN =
@@ -71,4 +71,30 @@ export interface WeatherAlertPayload {
 
 export async function getWeatherAlerts(): Promise<WeatherAlertPayload> {
   return request<WeatherAlertPayload>('/api/weather-alerts')
+}
+
+export async function getFavorites(): Promise<Favorite[]> {
+  const payload = await request<{ favorites: Favorite[] }>('/api/favorites')
+  return payload.favorites
+}
+
+export async function addFavorite(
+  payload: FavoritePayload,
+): Promise<Favorite> {
+  const response = await request<{ favorite: Favorite }>('/api/favorites', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  })
+  return response.favorite
+}
+
+export async function deleteFavorite(itemId: string): Promise<void> {
+  await request<{ deleted: boolean }>(
+    `/api/favorites/${encodeURIComponent(itemId)}`,
+    { method: 'DELETE' },
+  )
+}
+
+export async function getTrends(days: number = 7): Promise<TrendPayload> {
+  return request<TrendPayload>(`/api/trends?days=${days}`)
 }

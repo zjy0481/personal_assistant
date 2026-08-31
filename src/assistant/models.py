@@ -1,7 +1,7 @@
 """Shared domain models for daily report content."""
 
 import hashlib
-from dataclasses import dataclass, field
+from dataclasses import asdict, dataclass, field
 from datetime import date, datetime
 from typing import Any
 
@@ -76,6 +76,57 @@ class Report:
     blocks: list[ContentBlock]
     degraded: bool = False
 
+
+
+@dataclass
+class Favorite:
+    """One user-saved content item."""
+
+    item_id: str
+    report_date: str = ""
+    block_kind: str = ""
+    title: str = ""
+    url: str = ""
+    source: str = ""
+    note: str = ""
+    status: str = "active"
+    created_at: str = ""
+    updated_at: str = ""
+    user_id: str = "default"
+
+
+@dataclass
+class NewsTerm:
+    """One keyword count for one report date."""
+
+    report_date: str
+    word: str
+    count: int
+    rank: int
+
+
+@dataclass
+class GitHubRepo:
+    """One repository trend point for one report date."""
+
+    report_date: str
+    repo: str
+    stars: int
+    new_stars: int | None
+    rank: int
+    appearances: int
+
+
+def favorite_to_dict(favorite: Favorite) -> dict[str, object]:
+    return asdict(favorite)
+
+
+def news_term_to_dict(term: NewsTerm) -> dict[str, object]:
+    return asdict(term)
+
+
+def github_repo_to_dict(repo: GitHubRepo) -> dict[str, object]:
+    return asdict(repo)
 
 @dataclass
 class WeatherAlert:

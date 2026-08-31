@@ -3,10 +3,13 @@ import { StatusPill } from './StatusPill'
 
 interface ItemCardProps {
   item: ContentItem
+  blockKind?: string
+  isFavorite: boolean
+  onFavorite: (item: ContentItem) => void
   onAsk: (item: ContentItem) => void
 }
 
-export function ItemCard({ item, onAsk }: ItemCardProps) {
+export function ItemCard({ item, isFavorite, onFavorite, onAsk }: ItemCardProps) {
   const summary = item.llm_summary || item.summary || '暂无摘要'
   const canAsk = item.url || item.title
 
@@ -33,13 +36,22 @@ export function ItemCard({ item, onAsk }: ItemCardProps) {
           </div>
           <p className="mt-2 text-sm leading-6 text-slate-600">{summary}</p>
         </div>
-        <button
-          type="button"
-          onClick={() => onAsk(item)}
-          className="shrink-0 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 shadow-sm transition hover:border-emerald-200 hover:text-emerald-700"
-        >
-          对此条提问
-        </button>
+        <div className="flex shrink-0 items-center gap-2">
+          <button
+            type="button"
+            onClick={() => onFavorite(item)}
+            className={`rounded-lg border px-3 py-1.5 text-xs font-medium shadow-sm transition ${isFavorite ? 'border-amber-200 bg-amber-50 text-amber-700' : 'border-slate-200 bg-white text-slate-700 hover:border-amber-200 hover:text-amber-700'}`}
+          >
+            {isFavorite ? '★ 已收藏' : '☆ 收藏'}
+          </button>
+          <button
+            type="button"
+            onClick={() => onAsk(item)}
+            className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 shadow-sm transition hover:border-emerald-200 hover:text-emerald-700"
+          >
+            对此条提问
+          </button>
+        </div>
       </div>
       <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-slate-400">
         <span>{item.source || '未知来源'}</span>

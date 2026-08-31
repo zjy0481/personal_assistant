@@ -116,6 +116,8 @@ class Settings(BaseSettings):
     llm_max_items: int = Field(default=50, ge=1, le=200)
     llm_chat_history_limit: int = Field(default=50, ge=1, le=100)
     llm_chat_retention_days: int = Field(default=7, ge=1, le=90)
+    trend_retention_days: int = Field(default=180, ge=1, le=3650)
+    news_trend_min_count: int = Field(default=1, ge=1, le=20)
     weather_alert_enabled: bool = True
     weather_alert_locations: list[str] = Field(default_factory=list)
     weather_alert_interval_seconds: int = Field(default=600, ge=60, le=86400)

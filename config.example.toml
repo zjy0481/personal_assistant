@@ -98,3 +98,5 @@ wecom_ai_retention_days = 180
 # wecom_ai_callback_url = ""
 # wecom_ai_token = ""
 # wecom_ai_encoding_aes_key = ""
+trend_retention_days = 180
+news_trend_min_count = 1
