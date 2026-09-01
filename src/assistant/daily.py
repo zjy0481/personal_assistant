@@ -7,7 +7,7 @@ from pathlib import Path
 from zoneinfo import ZoneInfo
 
 from assistant.config import Settings, load_settings
-from assistant.llm import create_llm_service
+from assistant.llm import LLMService, create_llm_service
 from assistant.models import Report
 from assistant.push import PushAdapter, PushResult, create_push_adapter
 from assistant.report import ReportBuilder
@@ -37,6 +37,7 @@ def run_daily(
     *,
     builder: ReportBuilder | None = None,
     adapter: PushAdapter | None = None,
+    llm_service: LLMService | None = None,
     store: SnapshotStore | None = None,
     now: datetime | None = None,
     force: bool = False,
@@ -56,6 +57,7 @@ def run_daily(
     builder = builder or create_report_builder(settings)
     adapter = adapter or create_push_adapter(settings)
     store = store or SnapshotStore(Path("data/assistant.db"))
+    llm_service = llm_service or create_llm_service(settings)
     max_attempts = max(1, retry_max or settings.daily_retry_max)
     interval = (
         retry_interval_seconds
@@ -98,6 +100,11 @@ def run_daily(
             mode="failed",
             message=message,
         )
+
+    try:
+        llm_service.summarize_report(report)
+    except Exception as exc:
+        logger.warning("LLM 摘要失败，不影响日报：%s", exc)
 
     try:
         store.save(report, force=force)

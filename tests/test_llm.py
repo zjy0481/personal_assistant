@@ -1,3 +1,5 @@
+import threading
+import time
 from datetime import datetime
 from zoneinfo import ZoneInfo
 
@@ -10,6 +12,7 @@ from assistant.llm import (
     LLMService,
     MockLLMClient,
     LLMClient,
+    LLMError,
 )
 from assistant.models import ContentBlock, ContentItem, Report
 
@@ -123,3 +126,72 @@ def test_answer_prompt_requires_chinese() -> None:
     system = client.messages[0]["content"]
     assert "始终使用简体中文" in system
     assert "英文" in system
+class _ConcurrencyClient(LLMClient):
+    def __init__(self) -> None:
+        self.lock = threading.Lock()
+        self.active = 0
+        self.max_active = 0
+
+    def chat(self, messages: list[dict[str, str]]) -> str:
+        with self.lock:
+            self.active += 1
+            self.max_active = max(self.max_active, self.active)
+        time.sleep(0.05)
+        with self.lock:
+            self.active -= 1
+        return "并发摘要"
+
+
+def test_summarize_report_respects_item_budget() -> None:
+    settings = _settings()
+    settings.llm_max_items = 1
+    report = _report()
+    report.blocks[0].items.append(
+        ContentItem(title="第二条新闻", url="https://example.com/2", source="人民网")
+    )
+    service = LLMService(settings, client=MockLLMClient())
+
+    service.summarize_report(report)
+
+    assert report.blocks[0].items[0].summary_status == "ok"
+    assert report.blocks[0].items[1].summary_status == ""
+
+
+def test_summarize_report_uses_bounded_concurrency() -> None:
+    client = _ConcurrencyClient()
+    report = _report()
+    for index in range(1, 5):
+        report.blocks[0].items.append(
+            ContentItem(
+                title=f"并发新闻{index}",
+                url=f"https://example.com/{index}",
+                source="人民网",
+            )
+        )
+    service = LLMService(_settings(), client=client)
+
+    service.summarize_report(report)
+
+    assert client.max_active == 3
+    assert all(item.summary_status == "ok" for item in report.blocks[0].items)
+class _FlakyLLMClient(LLMClient):
+    def __init__(self) -> None:
+        self.calls = 0
+
+    def chat(self, messages: list[dict[str, str]]) -> str:
+        self.calls += 1
+        if self.calls == 1:
+            raise LLMError("transient failure")
+        return "重试摘要"
+
+
+def test_summarize_report_retries_failed_item_once() -> None:
+    client = _FlakyLLMClient()
+    report = _report()
+    service = LLMService(_settings(), client=client)
+
+    service.summarize_report(report)
+
+    assert client.calls == 2
+    assert report.blocks[0].items[0].summary_status == "ok"
+    assert report.blocks[0].items[0].llm_summary == "重试摘要"

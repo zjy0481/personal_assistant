@@ -32,7 +32,7 @@ NEWS_FEEDS = [
     Feed(
         key="chinanews",
         name="中国新闻网",
-        url="https://www.chinanews.com.cn/rss/",
+        url="https://www.chinanews.com.cn/rss/china.xml",
         language="zh",
         category="时事",
     ),

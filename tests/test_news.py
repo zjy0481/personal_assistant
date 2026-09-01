@@ -2,7 +2,7 @@ from datetime import datetime, timezone
 
 import httpx
 
-from assistant.sources.news import NewsSource
+from assistant.sources.news import NEWS_FEEDS, NewsSource
 
 SINCE = datetime(2026, 8, 28, 0, 0, tzinfo=timezone.utc)
 
@@ -140,3 +140,7 @@ def test_news_source_drops_items_older_than_since() -> None:
     )
 
     assert result.items == []
+
+def test_chinanews_feed_uses_parseable_xml_url() -> None:
+    feed = next(item for item in NEWS_FEEDS if item.key == "chinanews")
+    assert feed.url == "https://www.chinanews.com.cn/rss/china.xml"

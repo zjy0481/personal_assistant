@@ -4,7 +4,7 @@ from zoneinfo import ZoneInfo
 
 from assistant.config import Settings
 from assistant.daily import run_daily
-from assistant.models import ContentBlock, Report
+from assistant.models import ContentBlock, ContentItem, Report
 from assistant.push import PushResult
 from assistant.storage import SnapshotStore
 
@@ -241,3 +241,62 @@ def test_run_daily_does_not_retry_terminal_push_error(tmp_path: Path) -> None:
     assert adapter.calls == 1
     assert store.load_latest_run_status() is not None
     assert store.load_latest_run_status().status == "failed"
+class _FakeLLMService:
+    def __init__(self, fail: bool = False) -> None:
+        self.calls = 0
+        self.fail = fail
+
+    def summarize_report(self, report: Report) -> Report:
+        self.calls += 1
+        if self.fail:
+            raise RuntimeError("summary failed")
+        for block in report.blocks:
+            for item in block.items:
+                item.summary_status = "ok"
+                item.llm_summary = "中文摘要"
+        return report
+
+
+def test_run_daily_calls_llm_summary_before_snapshot(tmp_path: Path) -> None:
+    report = _report()
+    report.blocks[0].items.append(
+        ContentItem(title="测试新闻", url="https://example.com/1", source="人民网")
+    )
+    service = _FakeLLMService()
+    store = SnapshotStore(tmp_path / "daily-llm.db")
+
+    result = run_daily(
+        _settings(),
+        builder=_FakeBuilder(report),
+        adapter=_FakeAdapter(),
+        store=store,
+        now=_now(),
+        llm_service=service,
+    )
+
+    assert result.success is True
+    assert service.calls == 1
+    saved = store.load_latest()
+    assert saved is not None
+    assert saved.blocks[0].items[0].summary_status == "ok"
+
+
+def test_run_daily_llm_summary_failure_does_not_block_report(tmp_path: Path) -> None:
+    report = _report()
+    report.blocks[0].items.append(
+        ContentItem(title="测试新闻", url="https://example.com/1", source="人民网")
+    )
+    service = _FakeLLMService(fail=True)
+    store = SnapshotStore(tmp_path / "daily-llm-fail.db")
+
+    result = run_daily(
+        _settings(),
+        builder=_FakeBuilder(report),
+        adapter=_FakeAdapter(),
+        store=store,
+        now=_now(),
+        llm_service=service,
+    )
+
+    assert result.success is True
+    assert store.load_latest() is not None

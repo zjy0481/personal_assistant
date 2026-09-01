@@ -11,7 +11,7 @@
 - 极端天气预警：独立进程轮询中央气象台/中国天气网，和风天气备用；首次发布和等级升级主动推送。
 - 收藏：新闻、AI 要事、GitHub 项目可收藏/取消收藏，数据持久化到 SQLite。
 - 数据可视化：新闻热词与 GitHub 热度两张 ECharts 图表，支持最近 7 天/30 天切换；不包含天气趋势。
-- 推送：PushPlus 主渠道、企业微信群机器人备用；预警通过企业微信 Webhook 主动推送。
+- 推送：企业微信群机器人主渠道、PushPlus 备用；预警通过企业微信 Webhook 主动推送。
 - 数据源降级：单个数据源失败时跳过对应内容块并标记降级，不影响其他内容块。
 
 ## 技术栈
@@ -30,10 +30,10 @@
 
 - Python 3.12+
 - uv
-- PushPlus 账号（主推送渠道）
+- 企业微信群机器人 Webhook（主推送渠道）
 - DeepSeek API Key
 - 企业微信智能机器人 BotID/Secret（群聊问答）
-- 企业微信群机器人 Webhook（可选备用推送）
+- PushPlus 账号（备用推送渠道）
 - Node.js 20+（仅构建前端时需要）
 
 ## 安装
@@ -62,11 +62,12 @@ Vite 默认运行在 `http://127.0.0.1:5173/`，并把 `/api` 代理到 `http://
 
 ## 配置
 
-复制 `.env.example` 为 `.env`，复制 `config.example.toml` 为 `config.toml`，按需填写。密钥只保存在 `.env`，不要提交到 Git。
+复制 `.env.example` 为 `.env`，复制 `config.example.toml` 为 `config.toml`，按需填写。密钥只保存在 `.env`，不要提交到 Git。默认信源白名单仅启用当前可解析的 `people`、`chinanews`、`openai`、`deepmind`、`qbitai`；其余源保留定义但默认不请求。
 
 ### 基础配置
 
 ```dotenv
+ASSISTANT_PUSH_CHANNELS=["wecom_group", "pushplus"]
 ASSISTANT_PUSHPLUS_TOKEN=你的PushPlus用户token
 ASSISTANT_WECOM_GROUP_WEBHOOK=https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=你的key
 ```
@@ -81,7 +82,7 @@ ASSISTANT_LLM_MODEL=deepseek-v4-flash
 ASSISTANT_LLM_SUMMARY_ENABLED=true
 ```
 
-摘要与问答共享每日 300 次、每分钟 10 次的限制，连续失败 3 次后熔断。
+摘要与问答共享每日 300 次、每分钟 30 次的限制，连续失败 3 次后熔断。
 
 ### 企业微信智能机器人
 

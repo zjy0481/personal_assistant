@@ -20,7 +20,7 @@ def _settings() -> Settings:
     return Settings(
         location="上海",
         timezone="Asia/Shanghai",
-        push_channels=["pushplus", "wecom_group"],
+        push_channels=["wecom_group", "pushplus"],
         pushplus_token="pushplus-token",
         wecom_group_webhook="https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=abc",
         push_max_items=3,
@@ -175,14 +175,14 @@ def test_push_chain_notifies_once_when_all_channels_fail() -> None:
     assert "备用渠道失败" in notifications[0]
 
 
-def test_create_push_adapter_uses_ordered_pushplus_then_webhook() -> None:
+def test_create_push_adapter_uses_ordered_webhook_then_pushplus() -> None:
     calls: list[str] = []
 
     def handler(request: httpx.Request) -> httpx.Response:
         calls.append(str(request.url))
-        if "pushplus.plus" in str(request.url):
-            return httpx.Response(200, json={"code": 200, "data": "abc"})
-        return httpx.Response(200, json={"errcode": 0, "errmsg": "ok"})
+        if "qyapi.weixin.qq.com" in str(request.url):
+            return httpx.Response(200, json={"errcode": 0, "errmsg": "ok"})
+        return httpx.Response(200, json={"code": 200, "data": "abc"})
 
     settings = _settings()
     adapter = create_push_adapter(
@@ -193,19 +193,19 @@ def test_create_push_adapter_uses_ordered_pushplus_then_webhook() -> None:
     result = adapter.send_report(_report())
 
     assert result.success is True
-    assert result.channel == "pushplus"
+    assert result.channel == "wecom_group"
     assert len(calls) == 1
-    assert "pushplus.plus" in calls[0]
+    assert "qyapi.weixin.qq.com" in calls[0]
 
 
-def test_create_push_adapter_falls_back_to_webhook_when_pushplus_rejects() -> None:
+def test_create_push_adapter_falls_back_to_pushplus_when_webhook_rejects() -> None:
     calls: list[str] = []
 
     def handler(request: httpx.Request) -> httpx.Response:
         calls.append(str(request.url))
-        if "pushplus.plus" in str(request.url):
-            return httpx.Response(200, json={"code": 905, "msg": "未实名认证"})
-        return httpx.Response(200, json={"errcode": 0, "errmsg": "ok"})
+        if "qyapi.weixin.qq.com" in str(request.url):
+            return httpx.Response(200, json={"errcode": 40001, "errmsg": "invalid key"})
+        return httpx.Response(200, json={"code": 200, "data": "abc"})
 
     adapter = create_push_adapter(
         _settings(),
@@ -215,10 +215,10 @@ def test_create_push_adapter_falls_back_to_webhook_when_pushplus_rejects() -> No
     result = adapter.send_report(_report())
 
     assert result.success is True
-    assert result.channel == "wecom_group"
+    assert result.channel == "pushplus"
     assert result.fallback is True
     assert len(calls) == 2
-    assert "qyapi.weixin.qq.com" in calls[1]
+    assert "pushplus.plus" in calls[1]
 
 def test_create_push_adapter_returns_mock_when_push_mock() -> None:
     settings = _settings()

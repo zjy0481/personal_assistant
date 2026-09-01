@@ -214,3 +214,18 @@ def test_weather_alert_locations_fall_back_to_location() -> None:
 
     assert settings.alert_locations == ["杭州"]
     assert settings.active_weather_alert_types == DEFAULT_WEATHER_ALERT_TYPES
+
+def test_default_source_whitelist_uses_working_sources() -> None:
+    assert DEFAULT_SOURCE_WHITELIST == [
+        "people",
+        "chinanews",
+        "openai",
+        "deepmind",
+        "qbitai",
+    ]
+
+
+def test_default_llm_summary_budget_covers_full_report() -> None:
+    settings = Settings(location="上海", timezone="Asia/Shanghai")
+    assert settings.llm_max_items == 30
+    assert settings.llm_minute_limit == 30

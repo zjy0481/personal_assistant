@@ -16,16 +16,13 @@ DEFAULT_CONFIG_FILE = "config.toml"
 DEFAULT_LOCATION = "上海"
 DEFAULT_TIMEZONE = "Asia/Shanghai"
 DEFAULT_DATA_SOURCE_WHITELIST = ["weather", "news", "github", "ai"]
-DEFAULT_PUSH_CHANNELS = ["pushplus", "wecom_group"]
+DEFAULT_PUSH_CHANNELS = ["wecom_group", "pushplus"]
 DEFAULT_SOURCE_WHITELIST = [
-    "xinhua",
     "people",
-    "thepaper",
     "chinanews",
-    "cctv",
-    "reuters",
-    "ap",
-    "bbc",
+    "openai",
+    "deepmind",
+    "qbitai",
 ]
 DEFAULT_WEATHER_ALERT_TYPES = [
     "台风",
@@ -109,11 +106,11 @@ class Settings(BaseSettings):
     llm_model: str = "deepseek-v4-flash"
     llm_timeout_seconds: int = Field(default=30, ge=1, le=300)
     llm_daily_limit: int = Field(default=300, ge=1)
-    llm_minute_limit: int = Field(default=10, ge=1)
+    llm_minute_limit: int = Field(default=30, ge=1)
     llm_failure_threshold: int = Field(default=3, ge=1, le=10)
     llm_circuit_breaker_seconds: int = Field(default=60, ge=1)
     llm_summary_enabled: bool = True
-    llm_max_items: int = Field(default=50, ge=1, le=200)
+    llm_max_items: int = Field(default=30, ge=1, le=200)
     llm_chat_history_limit: int = Field(default=50, ge=1, le=100)
     llm_chat_retention_days: int = Field(default=7, ge=1, le=90)
     trend_retention_days: int = Field(default=180, ge=1, le=3650)

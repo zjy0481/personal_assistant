@@ -7,19 +7,19 @@ timezone = "Asia/Shanghai"
 data_source_whitelist = ["weather", "news", "github", "ai"]
 
 # 新闻与 AI 允许采集的信源 key。
-source_whitelist = ["xinhua", "people", "thepaper", "chinanews", "cctv", "reuters", "ap", "bbc"]
+source_whitelist = ["people", "chinanews", "openai", "deepmind", "qbitai"]
 
-# 推送渠道按顺序尝试；pushplus 为主渠道，wecom_group 为备用渠道。
-push_channels = ["pushplus", "wecom_group"]
+# 推送渠道按顺序尝试；wecom_group 为主渠道，pushplus 为备用渠道。
+push_channels = ["wecom_group", "pushplus"]
 
 # 每个内容板块默认推送条数上限。
 push_max_items = 5
 
-# PushPlus 微信服务号主渠道；token 建议只放在 .env。
-pushplus_token = ""
-
-# 企业微信群机器人备用渠道；Webhook URL 含密钥，建议只放在 .env。
+# 企业微信群机器人主渠道；Webhook URL 含密钥，建议只放在 .env。
 wecom_group_webhook = ""
+
+# PushPlus 微信服务号备用渠道；token 建议只放在 .env。
+pushplus_token = ""
 
 # 本地验证可设为 true，使用 mock 适配器，不调用真实推送 API。
 push_mock = false
@@ -52,11 +52,11 @@ llm_base_url = "https://api.deepseek.com"
 llm_model = "deepseek-v4-flash"
 llm_timeout_seconds = 30
 llm_daily_limit = 300
-llm_minute_limit = 10
+llm_minute_limit = 30
 llm_failure_threshold = 3
 llm_circuit_breaker_seconds = 60
 llm_summary_enabled = true
-llm_max_items = 50
+llm_max_items = 30
 llm_chat_history_limit = 50
 llm_chat_retention_days = 7# V2 Phase 2：极端天气预警主动推送。
 # 预警监测为独立进程，每 10 分钟检查一次；首次发布和等级升级会推送，降级/解除只更新网页时间线。

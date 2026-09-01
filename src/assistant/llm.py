@@ -1,6 +1,9 @@
 """LLM client, rate limiting and report summarization/QA services."""
 
+import logging
+
 import threading
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
@@ -9,7 +12,10 @@ import httpx
 from assistant.config import Settings
 from assistant.models import ContentItem, Report
 
+logger = logging.getLogger(__name__)
+
 SUMMARIZABLE_BLOCKS = {"news", "ai", "github"}
+SUMMARY_CONCURRENCY = 3
 
 
 class LLMError(RuntimeError):
@@ -208,19 +214,27 @@ class LLMService:
                             item.summary_status = "disabled"
             return report
 
-        budget = self.settings.llm_max_items
+        pending: list[ContentItem] = []
         for block in report.blocks:
-            if block.kind not in SUMMARIZABLE_BLOCKS or budget <= 0:
+            if block.kind not in SUMMARIZABLE_BLOCKS:
                 continue
             for item in block.items:
                 if item.summary_status:
                     continue
-                item.llm_summary, item.summary_status, item.summary_model = (
-                    self.summarize_item(item)
-                )
-                budget -= 1
-                if budget <= 0:
+                if len(pending) >= self.settings.llm_max_items:
                     break
+                pending.append(item)
+
+        if not pending:
+            return report
+
+        workers = max(1, min(SUMMARY_CONCURRENCY, len(pending)))
+        with ThreadPoolExecutor(max_workers=workers) as executor:
+            results = list(executor.map(self.summarize_item, pending))
+        for item, result in zip(pending, results):
+            if result[1] == "failed":
+                result = self.summarize_item(item)
+            item.llm_summary, item.summary_status, item.summary_model = result
         return report
 
     def summarize_item(self, item: ContentItem) -> tuple[str, str, str]:
@@ -244,9 +258,11 @@ class LLMService:
             self.limiter.record_success()
             return result, "ok", self.settings.llm_model
         except LLMRateLimitError as exc:
+            logger.warning("LLM 摘要被限流（%s）：%s", item.title, exc)
             return "", "rate_limited", self.settings.llm_model
         except (LLMCircuitOpenError, LLMError) as exc:
             self.limiter.record_failure()
+            logger.warning("LLM 摘要失败（%s）：%s", item.title, exc)
             return "", "failed", self.settings.llm_model
 
     def answer_question(
