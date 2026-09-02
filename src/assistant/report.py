@@ -76,7 +76,10 @@ class ReportBuilder:
             result = self.news_source.fetch(
                 whitelist=self.settings.source_whitelist,
                 since=since,
-                limit=10,
+                limit=max(self.settings.news_total_limit * 4, 40),
+                domestic_limit=self.settings.news_domestic_limit,
+                international_limit=self.settings.news_international_limit,
+                max_per_source=self.settings.news_max_per_source,
             )
         except Exception as exc:
             return self._failed_block("news", "时事新闻", "新闻数据源", exc)
@@ -84,7 +87,7 @@ class ReportBuilder:
             kind="news",
             title="时事新闻",
             result=result,
-            limit=10,
+            limit=self.settings.news_total_limit,
         )
 
     def _github_block(self) -> ContentBlock:
@@ -136,17 +139,19 @@ class ReportBuilder:
             for key, value in result.source_statuses.items()
             if value != "ok"
         }
-        status = "degraded" if failures else "ok"
+        messages = [
+            f"{key}: {value}" for key, value in failures.items()
+        ]
+        if getattr(result, "message", ""):
+            messages.append(result.message)
+        status = "degraded" if failures or getattr(result, "degraded", False) else "ok"
         return ContentBlock(
             kind=kind,
             title=title,
             status=status,
             items=_deduplicate_and_limit(result.items, limit),
             sources=list(result.source_statuses),
-            message="; ".join(
-                f"{key}: {value}" for key, value in failures.items()
-            )
-            or None,
+            message="; ".join(messages) or None,
         )
 
     def _failed_block(

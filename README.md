@@ -62,7 +62,7 @@ Vite 默认运行在 `http://127.0.0.1:5173/`，并把 `/api` 代理到 `http://
 
 ## 配置
 
-复制 `.env.example` 为 `.env`，复制 `config.example.toml` 为 `config.toml`，按需填写。密钥只保存在 `.env`，不要提交到 Git。默认信源白名单仅启用当前可解析的 `people`、`chinanews`、`openai`、`deepmind`、`qbitai`；其余源保留定义但默认不请求。
+复制 `.env.example` 为 `.env`，复制 `config.example.toml` 为 `config.toml`，按需填写。密钥只保存在 `.env`，不要提交到 Git。默认信源白名单仅启用当前可解析的 `chinanews`、`cctv`、`npr`、`france24`、`openai`、`deepmind`、`qbitai`；其余源保留定义但默认不请求。
 
 ### 基础配置
 
@@ -114,6 +114,15 @@ qweather_location_id = ""
 ```
 
 `weather_alert_locations` 留空时使用 `location`；和风备用源只有在配置 Key/JWT 后启用。
+
+### 新闻配额
+
+```dotenv
+ASSISTANT_NEWS_TOTAL_LIMIT=20
+ASSISTANT_NEWS_DOMESTIC_LIMIT=10
+ASSISTANT_NEWS_INTERNATIONAL_LIMIT=10
+ASSISTANT_NEWS_MAX_PER_SOURCE=5
+```
 
 ### 趋势与收藏
 

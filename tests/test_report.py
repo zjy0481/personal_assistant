@@ -24,7 +24,7 @@ class FakeNewsSource:
     def __init__(self, result: FeedResult) -> None:
         self.result = result
 
-    def fetch(self, whitelist, since, limit) -> FeedResult:
+    def fetch(self, whitelist, since, limit, **kwargs) -> FeedResult:
         return self.result
 
 
@@ -40,7 +40,7 @@ class FakeAISource:
     def __init__(self, result: FeedResult) -> None:
         self.result = result
 
-    def fetch(self, whitelist, since, limit) -> FeedResult:
+    def fetch(self, whitelist, since, limit, **kwargs) -> FeedResult:
         return self.result
 
 

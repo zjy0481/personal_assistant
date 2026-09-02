@@ -7,7 +7,7 @@ timezone = "Asia/Shanghai"
 data_source_whitelist = ["weather", "news", "github", "ai"]
 
 # 新闻与 AI 允许采集的信源 key。
-source_whitelist = ["people", "chinanews", "openai", "deepmind", "qbitai"]
+source_whitelist = ["chinanews", "cctv", "npr", "france24", "openai", "deepmind", "qbitai"]
 
 # 推送渠道按顺序尝试；wecom_group 为主渠道，pushplus 为备用渠道。
 push_channels = ["wecom_group", "pushplus"]
@@ -100,3 +100,7 @@ wecom_ai_retention_days = 180
 # wecom_ai_encoding_aes_key = ""
 trend_retention_days = 180
 news_trend_min_count = 1
+news_total_limit = 20
+news_domestic_limit = 10
+news_international_limit = 10
+news_max_per_source = 5

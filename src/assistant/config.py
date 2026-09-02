@@ -18,8 +18,10 @@ DEFAULT_TIMEZONE = "Asia/Shanghai"
 DEFAULT_DATA_SOURCE_WHITELIST = ["weather", "news", "github", "ai"]
 DEFAULT_PUSH_CHANNELS = ["wecom_group", "pushplus"]
 DEFAULT_SOURCE_WHITELIST = [
-    "people",
     "chinanews",
+    "cctv",
+    "npr",
+    "france24",
     "openai",
     "deepmind",
     "qbitai",
@@ -115,6 +117,10 @@ class Settings(BaseSettings):
     llm_chat_retention_days: int = Field(default=7, ge=1, le=90)
     trend_retention_days: int = Field(default=180, ge=1, le=3650)
     news_trend_min_count: int = Field(default=1, ge=1, le=20)
+    news_total_limit: int = Field(default=20, ge=1, le=100)
+    news_domestic_limit: int = Field(default=10, ge=0, le=100)
+    news_international_limit: int = Field(default=10, ge=0, le=100)
+    news_max_per_source: int = Field(default=5, ge=1, le=50)
     weather_alert_enabled: bool = True
     weather_alert_locations: list[str] = Field(default_factory=list)
     weather_alert_interval_seconds: int = Field(default=600, ge=60, le=86400)
@@ -198,6 +204,16 @@ class Settings(BaseSettings):
             if not self.wecom_ai_callback_url.strip() or not self.wecom_ai_token.strip() or not self.wecom_ai_encoding_aes_key.strip():
                 raise ValueError("回调模式必须配置 callback_url、token、encoding_aes_key")
         return self
+
+    @model_validator(mode="after")
+    def validate_news_limits(self) -> "Settings":
+        if (
+            self.news_domestic_limit + self.news_international_limit
+            > self.news_total_limit
+        ):
+            raise ValueError("新闻国内与国际配额之和不能超过新闻总数")
+        return self
+
     @model_validator(mode="after")
     def validate_web_auth(self) -> "Settings":
         if self.web_require_auth and not self.auth_token.strip():

@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import type { ContentBlock, ContentItem, Favorite, Report, RunStatus, TrendPayload, WeatherAlert, WeatherAlertEvent, WeatherAlertRun } from '../types'
 import { EmptyState } from './EmptyState'
 import { FavoritesPanel } from './FavoritesPanel'
@@ -119,7 +120,8 @@ function WeatherAlertPanel({
   run: WeatherAlertRun | null
 }) {
   const active = alerts.filter((alert) => alert.status === 'active')
-  const timeline = events.slice(0, 30)
+  const [timelineExpanded, setTimelineExpanded] = useState(false)
+  const visibleTimeline = timelineExpanded ? events : events.slice(0, 5)
 
   return (
     <section className="mb-8 overflow-hidden rounded-2xl border border-amber-200 bg-amber-50/70 p-6 shadow-sm">
@@ -183,35 +185,40 @@ function WeatherAlertPanel({
       )}
 
       <div className="mt-6">
-        <h3 className="mb-2 text-sm font-semibold text-slate-700">预警时间线</h3>
-        {timeline.length > 0 ? (
-          <div className="overflow-x-auto rounded-xl bg-white shadow-sm">
-            <table className="w-full min-w-[640px] text-left text-sm">
-              <thead>
-                <tr className="border-b border-slate-100 text-xs text-slate-400">
-                  <th className="px-4 py-3 font-medium">时间</th>
-                  <th className="px-4 py-3 font-medium">事件</th>
-                  <th className="px-4 py-3 font-medium">地区</th>
-                  <th className="px-4 py-3 font-medium">类型</th>
-                  <th className="px-4 py-3 font-medium">等级</th>
-                  <th className="px-4 py-3 font-medium">来源</th>
-                  <th className="px-4 py-3 font-medium">推送</th>
-                </tr>
-              </thead>
-              <tbody>
-                {timeline.map((event) => (
-                  <tr key={event.event_id} className="border-b border-slate-100 last:border-b-0">
-                    <td className="whitespace-nowrap px-4 py-3 text-slate-600">{formatDateTime(event.occurred_at)}</td>
-                    <td className="px-4 py-3 font-medium text-slate-700">{eventLabel(event.event_type)}</td>
-                    <td className="px-4 py-3 text-slate-600">{event.location}</td>
-                    <td className="px-4 py-3 text-slate-600">{event.alert_type}</td>
-                    <td className="px-4 py-3"><span className={`rounded-full px-2 py-0.5 text-xs font-medium ${levelClass(event.level)}`}>{event.level}</span></td>
-                    <td className="px-4 py-3 text-slate-500">{sourceLabel(event.source)}</td>
-                    <td className="px-4 py-3 text-slate-500">{pushLabel(event.push_status)}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+        <div className="mb-2 flex flex-wrap items-center justify-between gap-3">
+          <div className="flex items-center gap-2">
+            <h3 className="text-sm font-semibold text-slate-700">预警时间线</h3>
+            {events.length > 0 && (
+              <span className="rounded-full bg-white px-2 py-0.5 text-xs text-slate-500 shadow-sm">
+                {events.length} 条记录
+              </span>
+            )}
+          </div>
+          {events.length > 0 && (
+            <button
+              type="button"
+              onClick={() => setTimelineExpanded((current) => !current)}
+              aria-expanded={timelineExpanded}
+              className="rounded-lg border border-amber-200 bg-white px-3 py-1.5 text-xs font-medium text-amber-700 shadow-sm transition hover:bg-amber-100"
+            >
+              {timelineExpanded ? '收起' : '展开'}
+            </button>
+          )}
+        </div>
+        {visibleTimeline.length > 0 ? (
+          <div className={timelineExpanded ? 'max-h-80 overflow-y-auto rounded-xl bg-white shadow-sm' : 'rounded-xl bg-white shadow-sm'}>
+            {visibleTimeline.map((event) => (
+              <div key={event.event_id} className="flex flex-wrap items-start gap-x-4 gap-y-1 border-b border-slate-100 px-4 py-3 last:border-b-0">
+                <div className="w-40 shrink-0 text-xs text-slate-500">{formatDateTime(event.occurred_at)}</div>
+                <div className="min-w-0 flex-1">
+                  <div className="text-sm font-medium text-slate-700">{eventLabel(event.event_type)}</div>
+                  <div className="mt-0.5 text-xs text-slate-500">
+                    {event.location} · {event.alert_type} · {sourceLabel(event.source)} · {pushLabel(event.push_status)}
+                  </div>
+                </div>
+                <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${levelClass(event.level)}`}>{event.level}</span>
+              </div>
+            ))}
           </div>
         ) : (
           <p className="text-sm text-slate-500">暂无时间线记录。</p>

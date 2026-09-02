@@ -217,8 +217,10 @@ def test_weather_alert_locations_fall_back_to_location() -> None:
 
 def test_default_source_whitelist_uses_working_sources() -> None:
     assert DEFAULT_SOURCE_WHITELIST == [
-        "people",
         "chinanews",
+        "cctv",
+        "npr",
+        "france24",
         "openai",
         "deepmind",
         "qbitai",
@@ -229,3 +231,22 @@ def test_default_llm_summary_budget_covers_full_report() -> None:
     settings = Settings(location="上海", timezone="Asia/Shanghai")
     assert settings.llm_max_items == 30
     assert settings.llm_minute_limit == 30
+
+
+def test_news_quota_defaults() -> None:
+    settings = Settings(location="上海", timezone="Asia/Shanghai")
+    assert settings.news_total_limit == 20
+    assert settings.news_domestic_limit == 10
+    assert settings.news_international_limit == 10
+    assert settings.news_max_per_source == 5
+
+
+def test_news_quota_rejects_sum_exceeding_total() -> None:
+    with pytest.raises(ConfigurationError, match="新闻国内与国际配额"):
+        load_settings(
+            env={
+                "ASSISTANT_NEWS_TOTAL_LIMIT": "10",
+                "ASSISTANT_NEWS_DOMESTIC_LIMIT": "6",
+                "ASSISTANT_NEWS_INTERNATIONAL_LIMIT": "6",
+            }
+        )
