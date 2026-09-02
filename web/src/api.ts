@@ -41,6 +41,9 @@ export async function getStatus(): Promise<{
   llm_configured: boolean
   llm_summary_enabled: boolean
   llm_model: string
+  web_search_enabled: boolean
+  web_search_model: string
+  web_daily_limit: number
 }> {
   return request('/api/status')
 }
@@ -48,11 +51,75 @@ export async function getStatus(): Promise<{
 export async function askReport(
   message: string,
   sessionId: string,
+  mode: string = 'auto',
 ): Promise<ChatResponse> {
   return request('/api/chat', {
     method: 'POST',
-    body: JSON.stringify({ message, session_id: sessionId }),
+    body: JSON.stringify({ message, session_id: sessionId, mode }),
   })
+}
+
+export async function askReportStream(
+  message: string,
+  sessionId: string,
+  mode: string = 'auto',
+  onDelta?: (text: string) => void,
+  onStage?: (stage: string) => void,
+): Promise<ChatResponse> {
+  const headers = new Headers({ Accept: 'text/event-stream' })
+  headers.set('Content-Type', 'application/json')
+  if (AUTH_TOKEN) {
+    headers.set('Authorization', `Bearer ${AUTH_TOKEN}`)
+  }
+  const response = await fetch(`${API_BASE}/api/chat/stream`, {
+    method: 'POST',
+    headers,
+    body: JSON.stringify({ message, session_id: sessionId, mode }),
+  })
+  if (!response.ok) {
+    const payload = await response.json().catch(() => ({}))
+    const detail =
+      typeof payload === 'object' && payload && 'detail' in payload
+        ? String(payload.detail)
+        : `请求失败 (${response.status})`
+    throw new Error(detail)
+  }
+  const body = response.body
+  if (!body) {
+    throw new Error('流式响应不可用')
+  }
+  const reader = body.getReader()
+  const decoder = new TextDecoder()
+  let buffer = ''
+  let finalResult: ChatResponse | null = null
+  while (true) {
+    const { done, value } = await reader.read()
+    if (done) break
+    buffer += decoder.decode(value, { stream: true })
+    let separator = buffer.indexOf('\n\n')
+    while (separator >= 0) {
+      const block = buffer.slice(0, separator)
+      buffer = buffer.slice(separator + 2)
+      const parsed = parseSse(block)
+      if (parsed?.event === 'delta') {
+        onDelta?.(String(parsed.data?.text ?? ''))
+      }
+      if (parsed?.event === 'status') {
+        onStage?.(String(parsed.data?.stage ?? ''))
+      }
+      if (parsed?.event === 'result') {
+        finalResult = parsed.data as unknown as ChatResponse
+      }
+      if (parsed?.event === 'error') {
+        throw new Error(String(parsed.data?.message ?? '问答失败'))
+      }
+      separator = buffer.indexOf('\n\n')
+    }
+  }
+  if (!finalResult) {
+    throw new Error('未收到完整问答结果')
+  }
+  return finalResult
 }
 
 export async function getChatHistory(
@@ -97,4 +164,25 @@ export async function deleteFavorite(itemId: string): Promise<void> {
 
 export async function getTrends(days: number = 7): Promise<TrendPayload> {
   return request<TrendPayload>(`/api/trends?days=${days}`)
+}
+
+function parseSse(block: string): {
+  event: string
+  data: Record<string, unknown>
+} | null {
+  let event = 'message'
+  let dataText = ''
+  for (const line of block.split('\n')) {
+    if (line.startsWith('event:')) {
+      event = line.slice(6).trim()
+    } else if (line.startsWith('data:')) {
+      dataText += line.slice(5).trim()
+    }
+  }
+  if (!dataText) return null
+  try {
+    return { event, data: JSON.parse(dataText) as Record<string, unknown> }
+  } catch {
+    return null
+  }
 }

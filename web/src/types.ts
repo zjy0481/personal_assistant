@@ -48,6 +48,9 @@ export interface ChatResponse {
   answer: string
   session_id: string
   citations: Array<{ title: string; url: string }>
+  web_used?: boolean
+  web_status?: string
+  web_message?: string
 }
 
 export interface ChatHistoryItem {

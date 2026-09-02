@@ -3,11 +3,15 @@
 import asyncio
 import re
 import secrets
+import threading
 from dataclasses import asdict
 from datetime import date, timedelta
 from typing import Any
 
+import json
+
 from fastapi import FastAPI, HTTPException, Query, Request
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
 from assistant.llm import LLMError, LLMNotConfiguredError
@@ -37,6 +41,7 @@ class FavoriteRequest(BaseModel):
 class ChatRequest(BaseModel):
     message: str = Field(min_length=1, max_length=2000)
     session_id: str = Field(default="", max_length=100)
+    mode: str = Field(default="auto", max_length=10)
 
 
 class ChatHistoryItem(BaseModel):
@@ -96,12 +101,34 @@ def register_api_routes(
             limit=int(request.app.state.settings.llm_chat_history_limit),
         )
         try:
-            answer = await asyncio.to_thread(
-                llm_service.answer_question,
-                report,
-                payload.message,
-                history,
-            )
+            web_qa_service = getattr(request.app.state, "web_qa_service", None)
+            if web_qa_service is not None:
+                result = await asyncio.to_thread(
+                    web_qa_service.answer_question,
+                    report,
+                    payload.message,
+                    history,
+                    payload.mode,
+                )
+                answer = result.answer
+                citations = [
+                    {"title": source.title, "url": source.url}
+                    for source in result.citations
+                ]
+                web_used = result.used_web
+                web_status = result.status
+                web_message = result.message
+            else:
+                answer = await asyncio.to_thread(
+                    llm_service.answer_question,
+                    report,
+                    payload.message,
+                    history,
+                )
+                citations = _extract_citations(answer)
+                web_used = False
+                web_status = "offline"
+                web_message = ""
         except LLMNotConfiguredError as exc:
             raise HTTPException(status_code=503, detail=str(exc)) from exc
         except LLMError as exc:
@@ -111,20 +138,163 @@ def register_api_routes(
             session_id,
             "user",
             payload.message,
-            metadata={"source": "web"},
+            metadata={
+                "source": "web",
+                "web_mode": payload.mode,
+                "web_used": web_used,
+            },
         )
         store.save_chat_message(
             session_id,
             "assistant",
             answer,
-            metadata={"source": "web"},
+            metadata={
+                "source": "web",
+                "web_used": web_used,
+                "web_status": web_status,
+                "web_message": web_message,
+            },
         )
-        citations = _extract_citations(answer)
         return {
             "answer": answer,
             "session_id": session_id,
             "citations": citations,
+            "web_used": web_used,
+            "web_status": web_status,
+            "web_message": web_message,
         }
+
+    @app.post("/api/chat/stream")
+    async def chat_stream(
+        request: Request,
+    ) -> StreamingResponse:
+        active_store = _store(store)
+        report = _report(active_store)
+        if report is None:
+            raise HTTPException(status_code=404, detail="暂无日报快照")
+        try:
+            raw = await request.body()
+            if isinstance(raw, bytes):
+                raw = raw.decode("utf-8")
+            data = json.loads(raw or "{}")
+            payload = ChatRequest.model_validate(data)
+        except Exception as exc:
+            raise HTTPException(
+                status_code=422,
+                detail=f"请求体必须是有效的 JSON: {exc}",
+            ) from exc
+        llm_service = getattr(request.app.state, "llm_service", None)
+        if llm_service is None:
+            raise HTTPException(status_code=503, detail="LLM 服务未配置")
+        web_qa_service = getattr(request.app.state, "web_qa_service", None)
+        session_id = payload.session_id.strip() or secrets.token_urlsafe(16)
+        history = active_store.load_chat_history(
+            session_id,
+            limit=int(request.app.state.settings.llm_chat_history_limit),
+        )
+
+        async def events():
+            loop = asyncio.get_running_loop()
+            queue: asyncio.Queue[Any] = asyncio.Queue()
+
+            def worker() -> None:
+                try:
+                    if web_qa_service is None:
+                        loop.call_soon_threadsafe(
+                            queue.put_nowait,
+                            ("status", {"stage": "starting"}),
+                        )
+                        answer = llm_service.answer_question(
+                            report,
+                            payload.message,
+                            history,
+                        )
+                        loop.call_soon_threadsafe(
+                            queue.put_nowait,
+                            ("delta", {"text": answer}),
+                        )
+                        loop.call_soon_threadsafe(
+                            queue.put_nowait,
+                            (
+                                "result",
+                                {
+                                    "answer": answer,
+                                    "citations": _extract_citations(answer),
+                                    "web_used": False,
+                                    "web_status": "offline",
+                                    "web_message": "",
+                                    "stages": ["offline"],
+                                },
+                            ),
+                        )
+                    else:
+                        for event in web_qa_service.answer_question_events(
+                            report,
+                            payload.message,
+                            history,
+                            payload.mode,
+                        ):
+                            loop.call_soon_threadsafe(
+                                queue.put_nowait,
+                                (event.event, event.data),
+                            )
+                except LLMNotConfiguredError as exc:
+                    loop.call_soon_threadsafe(
+                        queue.put_nowait,
+                        ("error", {"message": str(exc)}),
+                    )
+                except LLMError as exc:
+                    loop.call_soon_threadsafe(
+                        queue.put_nowait,
+                        ("error", {"message": str(exc)}),
+                    )
+                except Exception as exc:
+                    loop.call_soon_threadsafe(
+                        queue.put_nowait,
+                        ("error", {"message": str(exc)}),
+                    )
+                finally:
+                    loop.call_soon_threadsafe(queue.put_nowait, None)
+
+            threading.Thread(target=worker, daemon=True).start()
+            while True:
+                item = await queue.get()
+                if item is None:
+                    break
+                event, data = item
+                if event == "result":
+                    result_data = dict(data)
+                    result_data["session_id"] = session_id
+                    yield _sse("result", result_data)
+                    active_store.save_chat_message(
+                        session_id,
+                        "user",
+                        payload.message,
+                        metadata={
+                            "source": "web",
+                            "web_mode": payload.mode,
+                            "web_used": bool(result_data.get("web_used")),
+                        },
+                    )
+                    active_store.save_chat_message(
+                        session_id,
+                        "assistant",
+                        result_data["answer"],
+                        metadata={
+                            "source": "web",
+                            "web_used": bool(result_data.get("web_used")),
+                            "web_status": result_data.get("web_status", ""),
+                            "web_message": result_data.get("web_message", ""),
+                        },
+                    )
+                    continue
+                yield _sse(event, data)
+
+        return StreamingResponse(
+            events(),
+            media_type="text/event-stream",
+            headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+        )
 
     @app.get("/api/favorites")
     def favorites(
@@ -207,6 +377,9 @@ def register_api_routes(
             ),
             "llm_summary_enabled": settings.llm_summary_enabled,
             "llm_model": settings.llm_model,
+            "web_search_enabled": settings.web_search_enabled,
+            "web_search_model": settings.web_search_model or settings.llm_model,
+            "web_daily_limit": settings.web_daily_limit,
         }
 
 
@@ -254,6 +427,13 @@ def _extract_citations(answer: str) -> list[dict[str, str]]:
     for title, url in _LINK_RE.findall(answer):
         result.append({"title": title.strip(), "url": url})
     return result
+
+
+def _sse(event: str, data: Any) -> str:
+    return (
+        f"event: {event}\n"
+        f"data: {json.dumps(data, ensure_ascii=False, separators=(',', ':'))}\n\n"
+    )
 
 
 def _store(store: SnapshotStore | None) -> SnapshotStore:
