@@ -7,19 +7,19 @@ timezone = "Asia/Shanghai"
 data_source_whitelist = ["weather", "news", "github", "ai"]
 
 # 新闻与 AI 允许采集的信源 key。
-source_whitelist = ["xinhua", "people", "thepaper", "chinanews", "cctv", "reuters", "ap", "bbc"]
+source_whitelist = ["chinanews", "cctv", "npr", "france24", "openai", "deepmind", "qbitai"]
 
-# 推送渠道按顺序尝试；pushplus 为主渠道，wecom_group 为备用渠道。
-push_channels = ["pushplus", "wecom_group"]
+# 推送渠道按顺序尝试；wecom_group 为主渠道，pushplus 为备用渠道。
+push_channels = ["wecom_group", "pushplus"]
 
 # 每个内容板块默认推送条数上限。
 push_max_items = 5
 
-# PushPlus 微信服务号主渠道；token 建议只放在 .env。
-pushplus_token = ""
-
-# 企业微信群机器人备用渠道；Webhook URL 含密钥，建议只放在 .env。
+# 企业微信群机器人主渠道；Webhook URL 含密钥，建议只放在 .env。
 wecom_group_webhook = ""
+
+# PushPlus 微信服务号备用渠道；token 建议只放在 .env。
+pushplus_token = ""
 
 # 本地验证可设为 true，使用 mock 适配器，不调用真实推送 API。
 push_mock = false
@@ -45,3 +45,62 @@ auth_token = ""
 
 # 公网部署时设为 true；此时 auth_token 不能为空。
 web_require_auth = false
+# V2 Phase 1：DeepSeek LLM 摘要与网页问答。
+# llm_api_key 建议只放在 .env，不要提交到 Git；offline/mock 模式不需要真实 Key。
+llm_provider = "deepseek"
+llm_base_url = "https://api.deepseek.com"
+llm_model = "deepseek-v4-flash"
+llm_timeout_seconds = 30
+llm_daily_limit = 300
+llm_minute_limit = 30
+llm_failure_threshold = 3
+llm_circuit_breaker_seconds = 60
+llm_summary_enabled = true
+llm_max_items = 30
+llm_chat_history_limit = 50
+llm_chat_retention_days = 7# V2 Phase 2：极端天气预警主动推送。
+# 预警监测为独立进程，每 10 分钟检查一次；首次发布和等级升级会推送，降级/解除只更新网页时间线。
+weather_alert_enabled = true
+# 留空时使用上方 location；如需监测多个地区，可改为 ["上海", "北京"]。
+weather_alert_locations = []
+weather_alert_interval_seconds = 600
+# 留空表示监控默认极端天气类型；也可按需缩小范围，例如 ["暴雨", "台风"]。
+weather_alert_types = []
+weather_alert_retention_days = 180
+weather_alert_timeout_seconds = 12
+weather_alert_retry_max = 3
+weather_alert_failure_threshold = 3
+weather_alert_failure_pause_minutes = 60
+
+# 和风天气备用源（可选）：新版 JWT 用 qweather_token + qweather_api_host，
+# 旧版 API Key 使用 qweather_api_key；地区编码与经纬度可显式配置以避免每次地理查询。
+qweather_api_key = ""
+qweather_token = ""
+qweather_api_host = "https://api.qweather.com"
+qweather_location_id = ""
+# qweather_latitude = 31.23
+# qweather_longitude = 121.47
+
+# V2 Phase 2：企业微信智能机器人（群聊 @ 提问与 LLM 回复）。
+wecom_ai_enabled = false
+wecom_ai_mode = "long_connection"
+wecom_ai_bot_id = ""
+wecom_ai_bot_secret = ""
+wecom_ai_bot_name = "雪球日报助手"
+wecom_ai_allowed_chat_ids = []
+wecom_ai_allowed_user_ids = []
+wecom_ai_ws_url = "wss://openws.work.weixin.qq.com"
+wecom_ai_heartbeat_seconds = 30
+wecom_ai_reconnect_initial_seconds = 1
+wecom_ai_reconnect_max_seconds = 60
+wecom_ai_retention_days = 180
+# 回调模式专用（当前使用长连接，无需填写）。
+# wecom_ai_callback_url = ""
+# wecom_ai_token = ""
+# wecom_ai_encoding_aes_key = ""
+trend_retention_days = 180
+news_trend_min_count = 1
+news_total_limit = 20
+news_domestic_limit = 10
+news_international_limit = 10
+news_max_per_source = 5

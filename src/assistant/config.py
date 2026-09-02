@@ -16,16 +16,29 @@ DEFAULT_CONFIG_FILE = "config.toml"
 DEFAULT_LOCATION = "上海"
 DEFAULT_TIMEZONE = "Asia/Shanghai"
 DEFAULT_DATA_SOURCE_WHITELIST = ["weather", "news", "github", "ai"]
-DEFAULT_PUSH_CHANNELS = ["pushplus", "wecom_group"]
+DEFAULT_PUSH_CHANNELS = ["wecom_group", "pushplus"]
 DEFAULT_SOURCE_WHITELIST = [
-    "xinhua",
-    "people",
-    "thepaper",
     "chinanews",
     "cctv",
-    "reuters",
-    "ap",
-    "bbc",
+    "npr",
+    "france24",
+    "openai",
+    "deepmind",
+    "qbitai",
+]
+DEFAULT_WEATHER_ALERT_TYPES = [
+    "台风",
+    "暴雨",
+    "高温",
+    "寒潮",
+    "大风",
+    "雷电",
+    "雷雨大风",
+    "大雾",
+    "沙尘暴",
+    "强对流",
+    "暴雪",
+    "道路结冰",
 ]
 
 
@@ -74,6 +87,59 @@ class Settings(BaseSettings):
     wecom_userid: str = ""
     web_url: str = "http://127.0.0.1:8000/"
     wecom_mock: bool = False
+    wecom_ai_enabled: bool = False
+    wecom_ai_mode: str = "long_connection"
+    wecom_ai_bot_id: str = ""
+    wecom_ai_bot_secret: str = ""
+    wecom_ai_bot_name: str = ""
+    wecom_ai_allowed_chat_ids: list[str] = Field(default_factory=list)
+    wecom_ai_allowed_user_ids: list[str] = Field(default_factory=list)
+    wecom_ai_ws_url: str = "wss://openws.work.weixin.qq.com"
+    wecom_ai_callback_url: str = ""
+    wecom_ai_token: str = ""
+    wecom_ai_encoding_aes_key: str = ""
+    wecom_ai_heartbeat_seconds: int = Field(default=30, ge=5, le=120)
+    wecom_ai_reconnect_initial_seconds: int = Field(default=1, ge=1, le=60)
+    wecom_ai_reconnect_max_seconds: int = Field(default=60, ge=5, le=600)
+    wecom_ai_retention_days: int = Field(default=180, ge=1, le=3650)
+    llm_provider: str = "deepseek"
+    llm_api_key: str = ""
+    llm_base_url: str = "https://api.deepseek.com"
+    llm_model: str = "deepseek-v4-flash"
+    llm_timeout_seconds: int = Field(default=30, ge=1, le=300)
+    llm_daily_limit: int = Field(default=300, ge=1)
+    llm_minute_limit: int = Field(default=30, ge=1)
+    llm_failure_threshold: int = Field(default=3, ge=1, le=10)
+    llm_circuit_breaker_seconds: int = Field(default=60, ge=1)
+    llm_summary_enabled: bool = True
+    llm_max_items: int = Field(default=30, ge=1, le=200)
+    llm_chat_history_limit: int = Field(default=50, ge=1, le=100)
+    llm_chat_retention_days: int = Field(default=7, ge=1, le=90)
+    trend_retention_days: int = Field(default=180, ge=1, le=3650)
+    news_trend_min_count: int = Field(default=1, ge=1, le=20)
+    news_total_limit: int = Field(default=20, ge=1, le=100)
+    news_domestic_limit: int = Field(default=10, ge=0, le=100)
+    news_international_limit: int = Field(default=10, ge=0, le=100)
+    news_max_per_source: int = Field(default=5, ge=1, le=50)
+    weather_alert_enabled: bool = True
+    weather_alert_locations: list[str] = Field(default_factory=list)
+    weather_alert_interval_seconds: int = Field(default=600, ge=60, le=86400)
+    weather_alert_types: list[str] = Field(default_factory=list)
+    weather_alert_retention_days: int = Field(default=180, ge=1, le=3650)
+    weather_alert_timeout_seconds: int = Field(default=12, ge=3, le=60)
+    weather_alert_retry_max: int = Field(default=3, ge=1, le=10)
+    weather_alert_failure_threshold: int = Field(default=3, ge=1, le=20)
+    weather_alert_failure_pause_minutes: int = Field(
+        default=60,
+        ge=1,
+        le=1440,
+    )
+    qweather_api_key: str = ""
+    qweather_token: str = ""
+    qweather_api_host: str = "https://api.qweather.com"
+    qweather_location_id: str = ""
+    qweather_latitude: float | None = Field(default=None, ge=-90, le=90)
+    qweather_longitude: float | None = Field(default=None, ge=-180, le=180)
 
     @field_validator("location")
     @classmethod
@@ -97,6 +163,10 @@ class Settings(BaseSettings):
         "data_source_whitelist",
         "source_whitelist",
         "push_channels",
+        "weather_alert_locations",
+        "weather_alert_types",
+        "wecom_ai_allowed_chat_ids",
+        "wecom_ai_allowed_user_ids",
         mode="before",
     )
     @classmethod
@@ -122,13 +192,56 @@ class Settings(BaseSettings):
         raise ValueError("列表配置必须是数组或逗号分隔的字符串")
 
     @model_validator(mode="after")
+    def validate_wecom_ai(self) -> "Settings":
+        if not self.wecom_ai_active:
+            return self
+        if self.wecom_ai_mode not in ("long_connection", "callback"):
+            raise ValueError("wecom_ai_mode 仅支持 long_connection 或 callback")
+        if self.wecom_ai_mode == "long_connection":
+            if not self.wecom_ai_bot_id.strip() or not self.wecom_ai_bot_secret.strip():
+                raise ValueError("长连接模式必须配置 wecom_ai_bot_id 和 wecom_ai_bot_secret")
+        else:
+            if not self.wecom_ai_callback_url.strip() or not self.wecom_ai_token.strip() or not self.wecom_ai_encoding_aes_key.strip():
+                raise ValueError("回调模式必须配置 callback_url、token、encoding_aes_key")
+        return self
+
+    @model_validator(mode="after")
+    def validate_news_limits(self) -> "Settings":
+        if (
+            self.news_domestic_limit + self.news_international_limit
+            > self.news_total_limit
+        ):
+            raise ValueError("新闻国内与国际配额之和不能超过新闻总数")
+        return self
+
+    @model_validator(mode="after")
     def validate_web_auth(self) -> "Settings":
         if self.web_require_auth and not self.auth_token.strip():
             raise ValueError(
                 "公网访问要求鉴权（web_require_auth=true），"
                 "但未配置 auth_token"
             )
+        if (self.qweather_latitude is None) != (
+            self.qweather_longitude is None
+        ):
+            raise ValueError(
+                "qweather_latitude 和 qweather_longitude 必须同时配置"
+            )
         return self
+
+    @property
+    def wecom_ai_active(self) -> bool:
+        return self.wecom_ai_enabled or bool(
+            self.wecom_ai_bot_id.strip() and self.wecom_ai_bot_secret.strip()
+        )
+
+    @property
+    def alert_locations(self) -> list[str]:
+        return list(self.weather_alert_locations) or [self.location]
+
+    @property
+    def active_weather_alert_types(self) -> list[str]:
+        return list(self.weather_alert_types) or list(DEFAULT_WEATHER_ALERT_TYPES)
 
     @classmethod
     def settings_customise_sources(

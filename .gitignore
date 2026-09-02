@@ -10,3 +10,8 @@ __pycache__/
 dist/
 build/
 IDEA.md
+# V2 React frontend
+web/node_modules/
+web/dist/
+web/qa-*.png
+web/e2e-verify.mjs

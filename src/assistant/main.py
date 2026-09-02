@@ -9,4 +9,5 @@ from assistant.storage import SnapshotStore
 app = create_app(
     load_settings(),
     store=SnapshotStore(Path("data/assistant.db")),
+    frontend_dir=Path(__file__).resolve().parents[2] / "web" / "dist",
 )

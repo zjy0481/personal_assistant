@@ -24,9 +24,10 @@ _LANGUAGE_RE = re.compile(
     re.IGNORECASE,
 )
 _STARS_RE = re.compile(
-    r'href="[^"]*stargazers[^"]*"[^>]*>\s*<span[^>]*>([\d,]+)',
+    r'href="[^"]*stargazers[^"]*"[^>]*>(.*?)</a>',
     re.IGNORECASE | re.DOTALL,
 )
+_NUMBER_RE = re.compile(r"([\d,]+)")
 
 
 @dataclass
@@ -43,16 +44,38 @@ def _strip_html(value: str) -> str:
     return html.unescape(re.sub(r"<[^>]+>", "", value or "")).strip()
 
 
+def _parse_stars(article: str) -> int | None:
+    match = _STARS_RE.search(article)
+    if not match:
+        return None
+    text = re.sub(r"<[^>]+>", "", match.group(1))
+    numbers = _NUMBER_RE.findall(text)
+    if not numbers:
+        return None
+    return int(numbers[-1].replace(",", ""))
+
+
 class GitHubTrendingSource:
     """Use github.com/trending first, then approximate with Search API."""
 
     OFFICIAL_URL = "https://github.com/trending"
     SEARCH_URL = "https://api.github.com/search/repositories"
+    OFFICIAL_TIMEOUT_SECONDS = 30.0
 
-    def __init__(self, client: httpx.Client | None = None) -> None:
+    def __init__(
+        self,
+        client: httpx.Client | None = None,
+        *,
+        official_timeout: float | None = None,
+    ) -> None:
         self.client = client or httpx.Client(
             timeout=10.0,
             follow_redirects=True,
+        )
+        self.official_timeout = (
+            official_timeout
+            if official_timeout is not None
+            else self.OFFICIAL_TIMEOUT_SECONDS
         )
 
     def fetch(
@@ -84,6 +107,7 @@ class GitHubTrendingSource:
             self.OFFICIAL_URL,
             params={"since": "weekly"},
             headers={"User-Agent": "personal-assistant/0.1"},
+            timeout=self.official_timeout,
         )
         response.raise_for_status()
 
@@ -104,12 +128,7 @@ class GitHubTrendingSource:
 
             description_match = _DESCRIPTION_RE.search(article)
             language_match = _LANGUAGE_RE.search(article)
-            stars_match = _STARS_RE.search(article)
-            stars = (
-                int(stars_match.group(1).replace(",", ""))
-                if stars_match
-                else 0
-            )
+            stars = _parse_stars(article)
 
             items.append(
                 ContentItem(
@@ -136,6 +155,9 @@ class GitHubTrendingSource:
             )
             if len(items) >= limit:
                 break
+
+        if not items or all((item.stars or 0) == 0 for item in items):
+            raise DataSourceError("GitHub Trending star 数量无法解析")
 
         return items
 

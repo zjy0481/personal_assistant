@@ -1,6 +1,6 @@
 """Shared message rendering for push channels."""
 
-from assistant.models import ContentBlock, ContentItem, Report
+from assistant.models import ContentBlock, ContentItem, Report, WeatherAlert
 
 
 def render_push_markdown(
@@ -118,3 +118,54 @@ def _fit_bytes(text: str, max_bytes: int) -> str:
         except UnicodeDecodeError:
             encoded = encoded[:-1]
     return ""
+_SOURCE_LABELS = {
+    "nmc": "中央气象台",
+    "qweather": "和风天气",
+}
+
+
+def _source_label(source: str) -> str:
+    return _SOURCE_LABELS.get(source, source or "气象部门")
+
+_WEATHER_EVENT_LABELS = {
+    "initial": "首次发布",
+    "upgraded": "等级升级",
+    "downgraded": "等级降级",
+    "cancelled": "已解除",
+    "updated": "来源更新",
+}
+
+
+def render_weather_alert_markdown(
+    alert: WeatherAlert,
+    event_type: str = "initial",
+    web_url: str = "",
+    max_bytes: int | None = None,
+) -> str:
+    """Render a compact Markdown warning suitable for WeChat push channels."""
+    label = _WEATHER_EVENT_LABELS.get(event_type, "状态更新")
+    parts = [
+        "# ⚠️ 极端天气预警",
+        f"**事件**：{label}",
+        f"**地区**：{alert.location}",
+        f"**类型**：{alert.alert_type}",
+        f"**等级**：{alert.level}",
+    ]
+    if alert.published_at:
+        parts.append(
+            f"**发布时间**：{alert.published_at:%Y-%m-%d %H:%M}"
+        )
+    if alert.description:
+        parts.append(f"**详情**：\n\n{alert.description}")
+    if alert.safety_guidance:
+        parts.append(f"**防御指南**：\n\n{alert.safety_guidance}")
+    if alert.source_url:
+        parts.append(
+            f"**来源**：[{_source_label(alert.source)}]({alert.source_url})"
+        )
+    if web_url:
+        parts.append(f"[查看实时预警]({web_url})")
+    text = "\n\n".join(parts)
+    if max_bytes is not None:
+        return _fit_bytes(text, max_bytes)
+    return text

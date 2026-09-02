@@ -1,0 +1,18 @@
+[Unit]
+Description=Personal Assistant WeCom AI Bot
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=personal-assistant
+Group=personal-assistant
+WorkingDirectory=/opt/personal-assistant/app
+Environment=HOME=/opt/personal-assistant
+EnvironmentFile=-/opt/personal-assistant/app/.env
+ExecStart=/opt/personal-assistant/app/.venv/bin/python -m assistant wecom
+Restart=always
+RestartSec=15
+
+[Install]
+WantedBy=multi-user.target
