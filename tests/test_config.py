@@ -250,3 +250,44 @@ def test_news_quota_rejects_sum_exceeding_total() -> None:
                 "ASSISTANT_NEWS_INTERNATIONAL_LIMIT": "6",
             }
         )
+
+
+def test_default_web_search_configuration() -> None:
+    settings = Settings(location="上海", timezone="Asia/Shanghai")
+
+    assert settings.web_search_enabled is True
+    assert settings.web_search_max_rounds == 2
+    assert settings.web_page_max_reads == 3
+    assert settings.web_fetch_timeout_seconds == 10
+    assert settings.web_page_cache_ttl_seconds == 600
+    assert settings.web_daily_limit == 100
+    assert settings.web_blocked_hosts == []
+
+
+def test_web_search_configuration_from_environment() -> None:
+    settings = load_settings(
+        env={
+            "ASSISTANT_WEB_SEARCH_ENABLED": "false",
+            "ASSISTANT_WEB_SEARCH_MAX_ROUNDS": "1",
+            "ASSISTANT_WEB_PAGE_MAX_READS": "2",
+            "ASSISTANT_WEB_FETCH_TIMEOUT_SECONDS": "5",
+            "ASSISTANT_WEB_PAGE_CACHE_TTL_SECONDS": "300",
+            "ASSISTANT_WEB_DAILY_LIMIT": "20",
+            "ASSISTANT_WEB_BLOCKED_HOSTS": '["example.com","bad.example"]',
+        }
+    )
+
+    assert settings.web_search_enabled is False
+    assert settings.web_search_max_rounds == 1
+    assert settings.web_page_max_reads == 2
+    assert settings.web_fetch_timeout_seconds == 5
+    assert settings.web_page_cache_ttl_seconds == 300
+    assert settings.web_daily_limit == 20
+    assert settings.web_blocked_hosts == ["example.com", "bad.example"]
+
+
+def test_web_search_configuration_rejects_invalid_bounds() -> None:
+    with pytest.raises(ConfigurationError, match="web_search_max_rounds"):
+        load_settings(
+            env={"ASSISTANT_WEB_SEARCH_MAX_ROUNDS": "0"},
+        )

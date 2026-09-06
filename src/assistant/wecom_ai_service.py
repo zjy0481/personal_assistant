@@ -15,6 +15,8 @@ from websockets.sync.client import connect as ws_connect
 from assistant.config import Settings, load_settings
 from assistant.llm import LLMError, LLMNotConfiguredError, create_llm_service
 from assistant.storage import SnapshotStore
+from assistant.web_qa import WebQAService
+from assistant.web_search import detect_web_mode
 
 logger = logging.getLogger(__name__)
 
@@ -99,12 +101,18 @@ class WeComAIBot:
         *,
         store: SnapshotStore | None = None,
         llm_service: Any | None = None,
+        web_qa_service: Any | None = None,
         connect_factory: Any = None,
         sleep: Any = time.sleep,
     ) -> None:
         self.settings = settings
         self.store = store or SnapshotStore(Path("data/assistant.db"))
         self.llm_service = llm_service or create_llm_service(settings)
+        self.web_qa_service = web_qa_service or WebQAService(
+            settings,
+            llm_service=self.llm_service,
+            store=self.store,
+        )
         self._connect_factory = connect_factory or ws_connect
         self._sleep = sleep
         self._stop = False
@@ -367,11 +375,21 @@ class WeComAIBot:
             session_id,
             limit=self.settings.llm_chat_history_limit,
         )
-        answer = self.llm_service.answer_question(
-            report,
-            question,
-            history,
-        )
+        mode = detect_web_mode(question)
+        if mode != "offline" and self.web_qa_service is not None:
+            result = self.web_qa_service.answer_question(
+                report,
+                question,
+                history,
+                mode,
+            )
+            answer = _format_web_answer(result)
+        else:
+            answer = self.llm_service.answer_question(
+                report,
+                question,
+                history,
+            )
         self.store.save_chat_message(
             session_id,
             "user",
@@ -497,11 +515,29 @@ def _fallback_answer(exc: Exception) -> str:
     return "抱歉，处理你的问题时出现异常，请稍后再试。"
 
 
+def _format_web_answer(result: Any) -> str:
+    sources = list(getattr(result, "citations", []) or [])[:3]
+    sources_block = ""
+    if sources:
+        lines = ["\n\n来源："]
+        for source in sources:
+            lines.append(f"- [{source.title}]({source.url})")
+        sources_block = "\n".join(lines)
+    marker = "已联网检索" if getattr(result, "used_web", False) else ""
+    if getattr(result, "message", ""):
+        marker = f"{marker}（{result.message}）" if marker else result.message
+    answer = str(getattr(result, "answer", "") or "")
+    body = "\n".join(part for part in (marker, answer) if part)
+    max_body = max(1, _MAX_REPLY_CHARS - len(sources_block))
+    return f"{body[:max_body]}{sources_block}"
+
+
 def run_wecom_bot(
     settings: Settings | None = None,
     *,
     store: SnapshotStore | None = None,
     llm_service: Any | None = None,
+    web_qa_service: Any | None = None,
     connect_factory: Any = None,
     sleep: Any = time.sleep,
 ) -> int:
@@ -514,6 +550,7 @@ def run_wecom_bot(
         settings or load_settings(),
         store=store,
         llm_service=llm_service,
+        web_qa_service=web_qa_service,
         connect_factory=connect_factory,
         sleep=sleep,
     )

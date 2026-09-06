@@ -1,6 +1,7 @@
 """LLM client, rate limiting and report summarization/QA services."""
 
 import logging
+import json
 
 import threading
 from concurrent.futures import ThreadPoolExecutor
@@ -39,6 +40,9 @@ class LLMClient:
 
     def chat(self, messages: list[dict[str, str]]) -> str:
         raise NotImplementedError
+
+    def stream_chat(self, messages: list[dict[str, str]]):
+        yield self.chat(messages)
 
 
 class DeepSeekLLMClient(LLMClient):
@@ -97,6 +101,45 @@ class DeepSeekLLMClient(LLMClient):
             raise
         except Exception as exc:
             raise LLMError(f"DeepSeek 请求失败: {exc}") from exc
+
+    def stream_chat(self, messages: list[dict[str, str]]):
+        if not self.api_key:
+            raise LLMNotConfiguredError("DeepSeek API Key 未配置")
+        try:
+            with self.client.stream(
+                "POST",
+                f"{self.base_url.rstrip('/')}/chat/completions",
+                headers={
+                    "Authorization": f"Bearer {self.api_key}",
+                    "Content-Type": "application/json",
+                },
+                json={
+                    "model": self.model,
+                    "messages": messages,
+                    "temperature": 0.2,
+                    "max_tokens": 700,
+                    "stream": True,
+                },
+            ) as response:
+                response.raise_for_status()
+                for line in response.iter_lines():
+                    if not line or not line.startswith("data:"):
+                        continue
+                    raw = line[5:].strip()
+                    if raw == "[DONE]":
+                        break
+                    try:
+                        data = json.loads(raw)
+                    except json.JSONDecodeError:
+                        continue
+                    choice = (data.get("choices") or [{}])[0]
+                    delta = (choice.get("delta") or {}).get("content") or ""
+                    if delta:
+                        yield delta
+        except LLMError:
+            raise
+        except Exception as exc:
+            raise LLMError(f"DeepSeek 流式请求失败: {exc}") from exc
 
 
 class MockLLMClient(LLMClient):
@@ -270,6 +313,7 @@ class LLMService:
         report: Report,
         question: str,
         history: list[dict[str, str]] | None = None,
+        extra_context: str = "",
     ) -> str:
         if not self.configured:
             raise LLMNotConfiguredError("LLM API Key 未配置，无法进行网页问答")
@@ -282,10 +326,10 @@ class LLMService:
             "格式为 [标题](URL)。回答可以使用 Markdown 让内容更易读。"
             "若上下文不足，请明确说明无法从日报判断，不要编造。"
         )
-        user = (
-            f"日报上下文：\n{context}\n\n"
-            f"用户问题：{question}"
-        )
+        user = f"日报上下文：\n{context}\n"
+        if extra_context:
+            user += f"\n补充材料：\n{extra_context}\n"
+        user += f"\n用户问题：{question}"
         messages: list[dict[str, str]] = [{"role": "system", "content": system}]
         messages.extend(history[-8:])
         messages.append({"role": "user", "content": user})
@@ -294,6 +338,54 @@ class LLMService:
             answer = self._chat_raw(messages)
             self.limiter.record_success()
             return answer
+        except (LLMRateLimitError, LLMCircuitOpenError, LLMError) as exc:
+            self.limiter.record_failure()
+            raise LLMError(f"问答失败: {exc}") from exc
+
+    def answer_question_with_context(
+        self,
+        report: Report,
+        question: str,
+        history: list[dict[str, str]] | None = None,
+        extra_context: str = "",
+    ) -> str:
+        return self.answer_question(
+            report,
+            question,
+            history,
+            extra_context=extra_context,
+        )
+
+    def answer_question_with_context_stream(
+        self,
+        report: Report,
+        question: str,
+        history: list[dict[str, str]] | None = None,
+        extra_context: str = "",
+    ):
+        if not self.configured:
+            raise LLMNotConfiguredError("LLM API Key 未配置，无法进行网页问答")
+        history = history or []
+        context = self._build_report_context(report)
+        system = (
+            "你是个人日报助手。请始终使用简体中文回答用户问题，"
+            "即使问题或原文是英文也要转述为中文。"
+            "只能基于提供的日报上下文和补充材料作答，回答事实时引用来源，"
+            "格式为 [标题](URL)。若无法确认，请明确说明。"
+        )
+        user = f"日报上下文：\n{context}\n"
+        if extra_context:
+            user += f"\n补充材料：\n{extra_context}\n"
+        user += f"\n用户问题：{question}"
+        messages: list[dict[str, str]] = [{"role": "system", "content": system}]
+        messages.extend(history[-10:])
+        messages.append({"role": "user", "content": user})
+        try:
+            self.limiter.check()
+            for delta in self._stream_raw(messages):
+                if delta:
+                    yield delta
+            self.limiter.record_success()
         except (LLMRateLimitError, LLMCircuitOpenError, LLMError) as exc:
             self.limiter.record_failure()
             raise LLMError(f"问答失败: {exc}") from exc
@@ -310,6 +402,15 @@ class LLMService:
         if not self.client:
             raise LLMNotConfiguredError("LLM Client 未配置")
         return self.client.chat(messages)
+
+    def _stream_raw(self, messages: list[dict[str, str]]):
+        if not self.client:
+            raise LLMNotConfiguredError("LLM Client 未配置")
+        stream = getattr(self.client, "stream_chat", None)
+        if callable(stream):
+            yield from stream(messages)
+        else:
+            yield self.client.chat(messages)
 
     @staticmethod
     def _build_report_context(report: Report) -> str:

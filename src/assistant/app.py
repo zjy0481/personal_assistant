@@ -14,6 +14,7 @@ from assistant.config import Settings
 from assistant.llm import LLMService, create_llm_service
 from assistant.models import report_to_dict
 from assistant.storage import RunStatus, SnapshotStore
+from assistant.web_qa import WebQAService
 
 TEMPLATE_DIR = Path(__file__).resolve().parent / "templates"
 
@@ -23,6 +24,7 @@ def create_app(
     store: SnapshotStore | None = None,
     llm_service: LLMService | None = None,
     frontend_dir: Path | None = None,
+    web_qa_service: WebQAService | None = None,
 ) -> FastAPI:
     """Create the web application sharing one report snapshot store."""
 
@@ -47,6 +49,11 @@ def create_app(
     app.state.settings = settings
     app.state.store = store
     app.state.llm_service = llm_service or create_llm_service(settings)
+    app.state.web_qa_service = web_qa_service or WebQAService(
+        settings,
+        llm_service=app.state.llm_service,
+        store=store,
+    )
     templates = Jinja2Templates(directory=str(TEMPLATE_DIR))
 
     @app.middleware("http")

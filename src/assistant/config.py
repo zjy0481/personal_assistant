@@ -115,6 +115,21 @@ class Settings(BaseSettings):
     llm_max_items: int = Field(default=30, ge=1, le=200)
     llm_chat_history_limit: int = Field(default=50, ge=1, le=100)
     llm_chat_retention_days: int = Field(default=7, ge=1, le=90)
+    web_search_enabled: bool = True
+    web_search_model: str = ""
+    web_search_max_rounds: int = Field(default=2, ge=1, le=5)
+    web_page_max_reads: int = Field(default=3, ge=1, le=10)
+    web_fetch_timeout_seconds: int = Field(default=10, ge=1, le=60)
+    web_page_cache_ttl_seconds: int = Field(default=600, ge=0, le=86400)
+    web_daily_limit: int = Field(default=100, ge=0)
+    web_blocked_hosts: list[str] = Field(default_factory=list)
+    web_page_max_bytes: int = Field(
+        default=2_000_000,
+        ge=1024,
+        le=50_000_000,
+    )
+    http_proxy: str = ""
+    https_proxy: str = ""
     trend_retention_days: int = Field(default=180, ge=1, le=3650)
     news_trend_min_count: int = Field(default=1, ge=1, le=20)
     news_total_limit: int = Field(default=20, ge=1, le=100)
@@ -167,6 +182,7 @@ class Settings(BaseSettings):
         "weather_alert_types",
         "wecom_ai_allowed_chat_ids",
         "wecom_ai_allowed_user_ids",
+        "web_blocked_hosts",
         mode="before",
     )
     @classmethod

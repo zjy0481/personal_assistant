@@ -4,9 +4,11 @@ from datetime import datetime
 from zoneinfo import ZoneInfo
 
 import pytest
+import httpx
 
 from assistant.config import Settings
 from assistant.llm import (
+    DeepSeekLLMClient,
     LLMRateLimitError,
     LLMRateLimiter,
     LLMService,
@@ -195,3 +197,39 @@ def test_summarize_report_retries_failed_item_once() -> None:
     assert client.calls == 2
     assert report.blocks[0].items[0].summary_status == "ok"
     assert report.blocks[0].items[0].llm_summary == "重试摘要"
+
+
+def test_answer_question_with_context_stream_yields_delta() -> None:
+    service = LLMService(_settings(), client=MockLLMClient())
+
+    chunks = list(
+        service.answer_question_with_context_stream(
+            _report(),
+            "今天有什么新闻？",
+            extra_context="补充材料",
+        )
+    )
+
+    assert chunks == ["测试摘要：请结合日报内容回答。"]
+
+
+def test_deepseek_stream_chat_parses_delta_lines() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            200,
+            text=(
+                'data: {"choices":[{"delta":{"content":"联"}}]}\n\n'
+                'data: {"choices":[{"delta":{"content":"网"}}]}\n\n'
+                "data: [DONE]\n\n"
+            ),
+        )
+
+    client = DeepSeekLLMClient(
+        api_key="test-key",
+        base_url="https://api.deepseek.com",
+        client=httpx.Client(transport=httpx.MockTransport(handler)),
+    )
+
+    chunks = list(client.stream_chat([{"role": "user", "content": "问题"}]))
+
+    assert chunks == ["联", "网"]

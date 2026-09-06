@@ -14,6 +14,7 @@ interface StatusInfo {
   llm_configured: boolean
   llm_summary_enabled: boolean
   llm_model: string
+  web_search_enabled: boolean
 }
 
 function App() {
@@ -172,6 +173,7 @@ function App() {
         onClose={() => setChatOpen(false)}
         askItem={askItem}
         onAskConsumed={() => setAskItem(null)}
+        webSearchEnabled={status?.web_search_enabled ?? true}
       />
     </AppShell>
   )

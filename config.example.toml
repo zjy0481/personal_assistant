@@ -58,7 +58,23 @@ llm_circuit_breaker_seconds = 60
 llm_summary_enabled = true
 llm_max_items = 30
 llm_chat_history_limit = 50
-llm_chat_retention_days = 7# V2 Phase 2：极端天气预警主动推送。
+llm_chat_retention_days = 7
+
+# V3 Phase 3：日报助手联网问答。
+web_search_enabled = true
+# 联网问答模型；留空时沿用 llm_model。
+web_search_model = ""
+web_search_max_rounds = 2
+web_page_max_reads = 3
+web_fetch_timeout_seconds = 10
+web_page_cache_ttl_seconds = 600
+web_daily_limit = 100
+web_blocked_hosts = []
+# 服务器如无法直接访问外部站点，可配置代理；本机默认留空。
+http_proxy = ""
+https_proxy = ""
+
+# V2 Phase 2：极端天气预警主动推送。
 # 预警监测为独立进程，每 10 分钟检查一次；首次发布和等级升级会推送，降级/解除只更新网页时间线。
 weather_alert_enabled = true
 # 留空时使用上方 location；如需监测多个地区，可改为 ["上海", "北京"]。
