@@ -85,7 +85,8 @@ class DeepSeekLLMClient(LLMClient):
                     "model": self.model,
                     "messages": messages,
                     "temperature": 0.2,
-                    "max_tokens": 700,
+                    "max_tokens": 2000,
+                    "reasoning_effort": "low",
                 },
             )
             response.raise_for_status()
@@ -117,7 +118,8 @@ class DeepSeekLLMClient(LLMClient):
                     "model": self.model,
                     "messages": messages,
                     "temperature": 0.2,
-                    "max_tokens": 700,
+                    "max_tokens": 2000,
+                    "reasoning_effort": "low",
                     "stream": True,
                 },
             ) as response:
