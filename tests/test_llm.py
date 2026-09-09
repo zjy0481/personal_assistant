@@ -15,6 +15,7 @@ from assistant.llm import (
     MockLLMClient,
     LLMClient,
     LLMError,
+    LLMIncompleteAnswerError,
 )
 from assistant.models import ContentBlock, ContentItem, Report
 
@@ -87,6 +88,39 @@ def test_answer_question_returns_citation() -> None:
 
     assert "测试新闻" in answer
     assert "https://example.com/1" in answer
+
+
+class _IncompleteThenValidClient(LLMClient):
+    def __init__(self) -> None:
+        self.calls = 0
+
+    def chat(self, messages: list[dict[str, str]]) -> str:
+        self.calls += 1
+        if self.calls == 1:
+            return "由于无法联网搜索，以下内容会基于日报内容回答："
+        return "刘海星近期访问了乌兹别克斯坦和阿塞拜疆。"
+
+
+def test_answer_question_retries_incomplete_colon_answer_once() -> None:
+    client = _IncompleteThenValidClient()
+    service = LLMService(_settings(), client=client)
+
+    answer = service.answer_question(_report(), "刘海星近期访问了哪些国家")
+
+    assert client.calls == 2
+    assert "乌兹别克斯坦" in answer
+
+
+class _AlwaysIncompleteClient(LLMClient):
+    def chat(self, messages: list[dict[str, str]]) -> str:
+        return "由于无法联网搜索，以下内容会基于日报内容回答："
+
+
+def test_answer_question_raises_when_retry_remains_incomplete() -> None:
+    service = LLMService(_settings(), client=_AlwaysIncompleteClient())
+
+    with pytest.raises(LLMIncompleteAnswerError, match="回答内容不完整"):
+        service.answer_question(_report(), "刘海星近期访问了哪些国家")
 
 
 def test_rate_limiter_rejects_after_daily_limit(tmp_path) -> None:

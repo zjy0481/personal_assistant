@@ -35,6 +35,14 @@ class LLMCircuitOpenError(LLMError):
     """Raised while the circuit breaker is open."""
 
 
+class LLMIncompleteAnswerError(LLMError):
+    """Raised when the model returns an incomplete answer after retry."""
+
+
+def _is_incomplete_answer(answer: str) -> bool:
+    return answer.rstrip().endswith((":", "："))
+
+
 class LLMClient:
     """Thin LLM provider boundary."""
 
@@ -97,6 +105,17 @@ class DeepSeekLLMClient(LLMClient):
             content = choices[0].get("message", {}).get("content", "")
             if not content.strip():
                 raise LLMError("DeepSeek 返回内容为空")
+            usage = payload.get("usage") or {}
+            details = usage.get("completion_tokens_details") or {}
+            if not isinstance(details, dict):
+                details = {}
+            reasoning_tokens = details.get("reasoning_tokens") or usage.get("reasoning_tokens") or 0
+            logger.debug(
+                "DeepSeek chat response: finish_reason=%s reasoning_tokens=%s content_len=%s",
+                choices[0].get("finish_reason"),
+                reasoning_tokens,
+                len(content),
+            )
             return content.strip()
         except LLMError:
             raise
@@ -338,8 +357,15 @@ class LLMService:
         try:
             self.limiter.check()
             answer = self._chat_raw(messages)
+            if _is_incomplete_answer(answer):
+                answer = self._chat_raw(messages)
+                if _is_incomplete_answer(answer):
+                    raise LLMIncompleteAnswerError("回答内容不完整，请重新提问")
             self.limiter.record_success()
             return answer
+        except LLMIncompleteAnswerError as exc:
+            self.limiter.record_failure()
+            raise
         except (LLMRateLimitError, LLMCircuitOpenError, LLMError) as exc:
             self.limiter.record_failure()
             raise LLMError(f"问答失败: {exc}") from exc

@@ -151,6 +151,23 @@ def test_chat_stream_endpoint_returns_sse_result(tmp_path: Path) -> None:
     assert '"session_id":' in body
 
 
+def test_chat_stream_uses_web_field_names(tmp_path: Path) -> None:
+    web_qa = FakeWebQA()
+    client = _client(tmp_path, web_qa)
+
+    response = client.post(
+        "/api/chat/stream",
+        json={"message": "今天有什么值得关注？", "session_id": "session-web-fields"},
+    )
+
+    body = response.text
+    assert '"web_used":true' in body
+    assert '"web_status":"ok"' in body
+    assert '"web_message":""' in body
+    assert '"used_web":' not in body
+    assert '"status":' not in body
+    assert '"message":' not in body
+
 def test_chat_stream_accepts_body_without_json_content_type(
     tmp_path: Path,
 ) -> None:

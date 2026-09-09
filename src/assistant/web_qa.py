@@ -593,8 +593,8 @@ def _web_answer_to_dict(result: WebAnswer) -> dict[str, Any]:
             {"title": source.title, "url": source.url}
             for source in result.citations
         ],
-        "used_web": result.used_web,
-        "status": result.status,
-        "message": result.message,
+        "web_used": result.used_web,
+        "web_status": result.status,
+        "web_message": result.message,
         "stages": list(result.stages),
     }

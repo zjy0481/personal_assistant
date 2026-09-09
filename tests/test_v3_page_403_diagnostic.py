@@ -93,6 +93,6 @@ def test_web_qa_degrades_to_failed_after_403() -> None:
 
     result = next(event.data for event in events if event.event == "result")
     assert isinstance(result, dict)
-    assert result["status"] == "failed"
+    assert result["web_status"] == "failed"
     assert "网页读取失败" in result["answer"]
-    assert "403 Forbidden" in result["message"]
+    assert "403 Forbidden" in result["web_message"]

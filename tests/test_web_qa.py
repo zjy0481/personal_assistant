@@ -361,3 +361,34 @@ def test_stream_events_yield_deltas_and_final_result() -> None:
     result = next(event for event in events if event.event == "result")
     assert result.data["answer"] == "联网答案"
     assert result.data["citations"][0]["url"] == "https://example.com/2"
+
+
+def test_stream_result_uses_web_field_names() -> None:
+    settings = Settings(
+        location="上海",
+        timezone="Asia/Shanghai",
+        web_search_enabled=True,
+        web_daily_limit=10,
+        llm_api_key="test-key",
+    )
+    service = WebQAService(
+        settings,
+        llm_service=FakeLLMService(answer="离线答案"),
+        search_adapter=FakeSearchAdapter(),
+        page_reader=FakePageReader(),
+    )
+
+    events = list(
+        service.answer_question_events(
+            _report(),
+            "不联网，今天有什么新闻？",
+            mode="auto",
+        )
+    )
+
+    result = next(event for event in events if event.event == "result")
+    assert result.data["web_used"] is False
+    assert result.data["web_status"] == "offline"
+    assert result.data["web_message"] == ""
+    assert "used_web" not in result.data
+    assert "status" not in result.data
