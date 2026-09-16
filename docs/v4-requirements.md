@@ -9,7 +9,7 @@
 ## 0. 已确认决策摘要
 
 - V4 独立于 V3，作为新的迭代基线；不修改 V3 已确认需求、验收和部署成果。
-- 实现真正的多用户数据隔离；现有 `default` 数据迁移到第一次初始化的用户。
+- 实现真正的多用户数据隔离；测试期数据不迁移，`user bootstrap` 直接重建数据库 schema（重建前自动备份，可回退）。
 - 不开放注册；登录页支持用户名或邮箱 + 密码，服务端使用 HttpOnly 安全会话。
 - 用户管理仅通过终端命令完成：新增、列出、重置密码、启用/停用。
 - 每个用户拥有时区、地区、日报/邮件简报时间和通知渠道配置。
@@ -40,7 +40,7 @@ V4 的目标是把助手从“单用户工具”升级为可由管理员创建�
 
 - 用户表、登录会话、密码哈希和密码重置。
 - `user add/list/reset-password/enable/disable` 终端命令。
-- 首次用户初始化和 `default` 历史数据迁移。
+- 首次用户初始化和数据库 schema 重建。
 - 每用户的日报与邮件简报调度。
 - IMAP 邮件账户、连接测试、增量同步和邮件存储。
 - 排除规则、LLM 重要度评分、邮件简报生成和追踪提升。
@@ -62,17 +62,20 @@ V4 的目标是把助手从“单用户工具”升级为可由管理员创建�
 
 ### V4-01 用户与鉴权
 
-- 新表 `users` 保存 `id`、`username`、`email`、`password_hash`、`is_active`、`created_at`、`updated_at`。
-- `username` 与 `email` 在用户维度唯一，登录时先按 username 再按 email 查找。
-- 密码使用 Argon2id 哈希；登录失败做统一模糊提示与频率限制。
-- 登录成功后签发 HttpOnly 会话 Cookie，`SameSite=Lax`，生产环境 `Secure`；默认 30 天滑动续期。
+- 新表 `users` 保存 `id`、`username`、`email`、`password_hash`、`is_active`、`created_at`、`updated_at`；`id` 使用 UUID4 文本。
+- `username` 与 `email` 必填且在用户维度唯一，登录时先按 username 再按 email 查找；判重按统一小写化后的值比较，存储保留用户原始写法。
+- 密码使用 Argon2id 哈希，最小长度 12 位且不强制字符类型混合；登录失败做统一模糊提示与频率限制（按“用户名 + IP”计数，连续 5 次后指数退避，不做永久锁定）。
+- 登录成功后签发 HttpOnly 会话 Cookie，`SameSite=Lax`；`Secure` 由 `cookie_secure` 控制，未显式配置时按 `web_url` 的 scheme 推导。会话默认 30 天滑动续期、绝对上限 90 天，剩余不足 15 天时才续签。
+- Cookie 中只携带不透明随机会话标识，服务端保存其哈希；登出、停用用户、重置密码、删除用户均撤销该用户全部会话。
 - 提供 `POST /api/auth/login`、`POST /api/auth/logout`、`GET /api/auth/me`。
 - 所有用户数据 API 必须从当前会话解析 `user_id`，禁止用全局 `default` 代替。
-- 保留可关闭的旧全局 token 兼容层，完成 V4 验证后由部署决定是否移除。
+- 删除旧全局 token 机制：移除鉴权中间件、`?token=` 查询参数以及 `auth_token`、`web_require_auth` 配置字段。
+- 未登录访问时，HTML 路由跳转到登录页，API 返回 401。
 
 ### V4-02 用户设置与调度
 
 - 每用户设置包括：`timezone`、`location`、`daily_report_time`、`mail_digest_time`、通知渠道、`is_active`。
+- 用户设置存放在独立的 `user_settings` 表（与 `users` 一对一），`users` 只保存身份与状态字段。
 - 网页“个人设置”页允许用户编辑自己的时区、地区、时间、通知渠道和启用开关；密码不在此页面修改。
 - 调度器遍历启用用户，分别执行日报生成、邮件同步和邮件简报生成；任一用户失败不能阻断其他用户。
 - 定时任务记录每用户运行状态、错误与降级信息。
@@ -81,7 +84,7 @@ V4 的目标是把助手从“单用户工具”升级为可由管理员创建�
 
 - 邮件账户字段：显示名、IMAP 主机、端口、SSL/TLS、邮箱地址、登录账号、密码/授权码、可选收件箱、状态。
 - 保存前必须测试连接；失败时不保存或明确标记，测试过程不留下完整密码日志。
-- 邮件凭据使用 `ENCRYPTION_KEY` 加密后再写入数据库；任何 API 不回传明文。
+- 邮件凭据使用 `ASSISTANT_ENCRYPTION_KEY` 加密后再写入数据库；任何 API 不回传明文。
 - 首次同步最近 7 天，之后记录 UID 并增量同步；同一邮件按 Message-ID 跨账户去重。
 - 邮件正文保存为纯文本，不保存附件、图片、HTML；正文与元数据保留 60 天。
 - 删除账户默认软删除：停止同步但保留历史；永久清除需二次确认并写审计记录。
@@ -115,16 +118,18 @@ V4 的目标是把助手从“单用户工具”升级为可由管理员创建�
 ### V4-07 安全与保留
 
 - 新增依赖：`argon2-cffi`、`cryptography`。
-- `.env` 新增 `SECRET_KEY` 与 `ENCRYPTION_KEY`；权限 600，缺失或长度不足时拒绝启动相关功能。
+- `.env` 新增 `ASSISTANT_SECRET_KEY` 与 `ASSISTANT_ENCRYPTION_KEY`（与 `Settings` 的 `ASSISTANT_` 前缀一致）；权限 600，缺失或长度不足时拒绝启动相关功能。
+- `ASSISTANT_SECRET_KEY` 在 web 进程启动时校验（随机值不少于 32 字节）；`ASSISTANT_ENCRYPTION_KEY` 在邮件功能实际使用时校验；`user bootstrap` 两者都强制校验。
+- 加解密集中在单一封装中并只支持单密钥；密钥轮换按一次性运维流程执行（解密全部 → 更换密钥 → 重新加密），本轮不引入密钥环。
 - 邮件正文加密存储；日志、错误页和 API 响应中不得出现密码、授权码或完整邮件正文。
 - 数据保留：邮件正文 60 天；邮件简报/运行通知 180 天；追踪与排除规则长期保留。
 
-### V4-08 迁移与交付
+### V4-08 数据库重建与交付
 
-- 数据库迁移自动备份 SQLite、幂等创建新表和补充 `user_id` 列。
-- 提供 `user bootstrap` 初始化第一个用户并迁移 `default` 数据。
-- 迁移前校验两个服务端密钥；密钥缺失时拒绝执行。
-- 交付物：`docs/v4-requirements.md`、`docs/v4-acceptance.md`、`docs/v4-migration-guide.md`、ADR-0006、6 个 V4 Issue。
+- 数据库重建前自动备份 SQLite 文件（带时间戳，保留最近 5 份），随后按新 schema 建库；命令重复运行幂等。
+- 提供 `user bootstrap` 初始化第一个用户并重建数据库；测试期数据不迁移。
+- 重建前校验两个服务端密钥；密钥缺失时拒绝执行。
+- 交付物：`docs/v4-requirements.md`、`docs/v4-acceptance.md`、`docs/v4-migration-guide.md`、ADR-0006、ADR-0007、6 个 V4 Issue。
 
 ## 4. Issue 依赖顺序
 
@@ -137,6 +142,6 @@ V4 的目标是把助手从“单用户工具”升级为可由管理员创建�
 | 5 | `v4-ui` | 页面与通知 | 3、4 |
 | 6 | `v4-release` | 测试、验收、文档与部署 | 1–5 |
 
-## 5. 人工迁移事项
+## 5. 人工迁移与重建事项
 
-具体操作见 `docs/v4-migration-guide.md`。原则上数据库表结构、`default` 数据迁移、默认值补齐均由 CLI 完成；用户只需要执行备份、保存密钥、运行初始化命令、登录配置邮箱和验证简报。
+具体操作见 `docs/v4-migration-guide.md`。原则上数据库备份、重建建表与首个用户创建均由 CLI 完成；用户只需要执行备份、保存密钥、运行初始化命令、登录配置邮箱和验证简报。

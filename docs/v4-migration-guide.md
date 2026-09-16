@@ -1,6 +1,6 @@
 # V4 人工迁移指引
 
-> 本文件用于 V4 实现完成后，在服务器上执行首次多用户迁移和邮件账户初始化。
+> 本文件用于 V4 实现完成后，在服务器上执行首次多用户重建和邮件账户初始化。
 
 ## 0. 开始前
 
@@ -25,7 +25,7 @@ sudo cp -a /opt/personal-assistant/app/.env /opt/personal-assistant/ops/backups/
 sudo cp -a /opt/personal-assistant/app/data/assistant.db /opt/personal-assistant/ops/backups/assistant.db.bak.$(date +%Y%m%d-%H%M%S)
 ```
 
-同时保留旧代码归档，以支持回退。
+同时保留旧代码归档，以支持回退。数据库备份是重建后唯一的回退材料，请确认备份成功后再继续。
 
 ## 2. 生成与保存密钥
 
@@ -38,8 +38,8 @@ python3 -c "import secrets; print(secrets.token_urlsafe(32))"
 将两个值分别写入 `/opt/personal-assistant/app/.env`：
 
 ```bash
-SECRET_KEY=<生成值1>
-ENCRYPTION_KEY=<生成值2>
+ASSISTANT_SECRET_KEY=<生成值1>
+ASSISTANT_ENCRYPTION_KEY=<生成值2>
 ```
 
 设置权限：
@@ -62,7 +62,9 @@ sudo -u personal-assistant env HOME=/opt/personal-assistant UV_DEFAULT_INDEX=htt
 
 依赖同步后会创建或更新 `.venv`。不要覆盖项目的 `data/`、`.env` 和服务端 `config.toml`。
 
-## 4. 初始化首个用户并迁移旧数据
+## 4. 初始化首个用户并重建数据库
+
+> V4 采用重建而非数据迁移：当前数据库只包含测试期数据，重建后不再保留；重建前的备份是唯一回退材料。
 
 ```bash
 cd /opt/personal-assistant/app
@@ -75,10 +77,10 @@ sudo -u personal-assistant env HOME=/opt/personal-assistant \
 命令会：
 
 - 检查两个密钥是否存在。
-- 备份数据库并创建新表。
-- 为 `report_snapshots`、`daily_runs`、`content_items`、`chat_messages` 补充 `user_id`。
-- 把旧 `default` 数据迁移到新用户。
-- 通过交互输入设置密码，不把密码写进命令或日志。
+- 备份现有数据库到运维目录（带时间戳）。
+- 删除旧数据库并按新 schema 建库。
+- 创建首个用户并写入新的数据归属结构。
+- 通过交互输入设置密码（也可用 `--password-stdin`），不把密码写进命令或日志。
 
 运行成功后，确认 `user list` 中该用户状态为 `active`。
 
@@ -118,7 +120,7 @@ sudo -u personal-assistant env HOME=/opt/personal-assistant \
 
 ## 8. 回退
 
-如果迁移或功能出现严重问题：
+如果重建或功能出现严重问题：
 
 1. 恢复数据库备份。
 2. 恢复旧代码归档。
